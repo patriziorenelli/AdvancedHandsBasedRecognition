@@ -1,0 +1,127 @@
+Pipeline proposta:
+Inizialmente si potrebbe lavorare l’immagine attraverso eventuali normalizzazioni e sfruttare MediaPipe per estrarre i landmark della mano per ritagliare l’immagine e ruotarla se necessario in modo da allineare le ROI. 
+
+Sfruttando CLAHE e filtri si potrebbe fare in modo da correggere l’illuminazione dell’immagine ed enfatizzare i pattern della pelle, come la presenza di vene (da valutare se abbastanza visibili in 11k Hands dataset) e le pieghe presenti sul palmo.
+
+Successivamente, la pipeline si suddivide in due macro-stream che vengono eseguiti in modo distinto, per elaborare le caratteristiche del palmo e dorso della mano.
+
+Per quanto riguarda lo stream del palmo, si potrebbe utilizzare una rete EfficientNet-B0 per apprendere la forma del palmo usando un'immagine a cui si applica un filtro gaussiano in modo da ridurre la complessità computazionale. In parallelo, per estrarre la texture del palmo comprendendo tutto il lato, si potrebbe sfruttare un Transformer ViT-S pre-addestrato con DINOv2, per cercare di ridurre il rischio di overfitting a causa della dimensione del dataset non enorme, mantenendo i pesi del Transformer fissi e inserendo un Multi-Layer Perceptron che ci dovrebbe consentire di filtrare le caratteristiche ottenute da DINOv2 per estrarre le caratteristiche che servono alla nostra analisi. A questi due blocchi si potrebbe affiancare una MobileNetV3-Large per la sola analisi della ROI centrale del palmo.
+
+Per quanto riguarda invece il dorso della mano, lo stream si dovrebbe concentrare principalmente sulla forma generale e da valutare se possibile sulle vene ( si potrebbe sfruttare un modello Swin-Tiny bloccato, sfruttando dei filtri per aumentare il contrasto e far risaltare i vasi sanguigni). In parallelo, una seconda EfficientNet-B0 analizza la forma globale del dorso, mentre una MobileNetV3-Large analizza i ritagli delle nocche ricavati tramite MediaPipe. Alla fine dello stream si effettua una fusione dei risultati dei singoli stream del dorso.
+
+Un passaggio finale consiste nella fusione dei dati provenienti dai singoli maco-stream, attraverso un modulo di fusione, da usare come identificato biometrico della mano per riconoscere l’identità dell’utente.
+
+
+┌───────────────────────────────┐
+│         INPUT IMAGE           │
+│         Immagine mano         │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────┐
+│              PREPROCESSING                  │
+│                                             │
+│ • Normalizzazione dell'immagine             │
+│ • MediaPipe Hand Landmarks                  │
+│ • Allineamento e rotazione della mano       │
+│ • Estrazione delle ROI                      │
+│ • CLAHE e filtri                            │
+│ • Correzione illuminazione                  │
+│ • Enfatizzazione texture, pieghe e vene     │
+└───────────────────┬─────────────────────────┘
+                    │
+          ┌─────────┴──────────┐
+          │                    │
+          ▼                    ▼
+┌───────────────────┐  ┌───────────────────┐
+│   STREAM PALMO    │  │   STREAM DORSO    │
+└─────────┬─────────┘  └─────────┬─────────┘
+          │                      │
+          │                      │
+     ┌────┴────┐            ┌────┴─────┐
+     │         │            │          │
+     ▼         ▼            ▼          ▼
+
+ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
+ │Efficient │ │ViT-S +   │ │ Swin-T   │ │ EfficientNet │
+ │Net-B0    │ │DINOv2    │ │ Tiny     │ │     B0       │
+ └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
+      │            │            │              │
+      │ Forma      │ Texture    │ Vene /       │ Forma
+      │ del palmo  │ completa   │ caratteristiche│ globale
+      │ + filtro   │ del palmo  │ visive       │ del dorso
+      │ gaussiano  │            │              │
+      │            │            │              │
+      │       ┌────▼─────┐      │              │
+      │       │ MLP      │      │              │
+      │       │Feature   │      │              │
+      │       │Selection │      │              │
+      │       └────┬─────┘      │              │
+      │            │            │              │
+      ▼            ▼            ▼              ▼
+
+ ┌──────────────┐          ┌──────────────────────┐
+ │MobileNetV3   │          │   MobileNetV3-Large  │
+ │Large         │          │                      │
+ │ROI centrale  │          │ ROI delle nocche     │
+ │del palmo     │          │ estratte con         │
+ └──────┬───────┘          │ MediaPipe            │
+        │                  └──────────┬───────────┘
+        │                             │
+        ▼                             ▼
+┌───────────────────┐       ┌───────────────────┐
+│ FUSIONE FEATURES  │       │ FUSIONE FEATURES  │
+│      PALMO        │       │      DORSO        │
+└─────────┬─────────┘       └─────────┬─────────┘
+          │                           │
+          └─────────────┬─────────────┘
+                        ▼
+          ┌───────────────────────────┐
+          │    FUSIONE MULTIMODALE    │
+          │                           │
+          │  Features Palmo + Dorsale │
+          └─────────────┬─────────────┘
+                        │
+                        ▼
+          ┌───────────────────────────┐
+          │   HAND BIOMETRIC TEMPLATE │
+          │                           │
+          │ Identificatore biometrico │
+          │       della mano          │
+          └─────────────┬─────────────┘
+                        │
+                        ▼
+          ┌───────────────────────────┐
+          │ RICONOSCIMENTO IDENTITÀ   │
+          └───────────────────────────┘
+NOTE DE MARSICO:
+Mi pare tutto molto appropriato, salvo il problema dell'eventuale taglia del dataset. Ma in quel caso si può pensare a un nested K-fold validation, anche se richiede un bel pò di tempo ...
+
+
+
+RIASSUNTO:
+
+1 Preprocessing: Normalizzazione e MediaPipe per estrarre landmark mano (verificare che mano ci sia)
+                 Ritagliare l'immagine della mano e ruotarla per allineare
+                 Usare eventualmente CLAHE (Prima di CLAHE per il dorso separare il canale verde per le vene poichè l'emoglobina assorbe maggiormente la len d'onda del verde)e filtrei per correggere illuminazione ed enfatizzare pattern pelle
+
+2 Stream Palmo:  Per texture: Transformer ViT-S pre-addestrato con DINOv2 mantenendo pesi del transformer fissi e inserendo un Multi-Layer Perceptron per estrare caratteristiche necessarie
+                 Per la sola ROI centrale del palmo: MobileNetV3-Large
+
+3 Stream Dorso:  Per forma: Swin-Tiny bloccato, sfruttando dei filtri per aumentare il contrasto e far risaltare i vasi sanguigni
+                 Per ROI nocche: MobileNetV3-Large analizza i ritagli delle nocche ricavati tramite MediaPipe
+
+4 Fusione Stream Palmo
+5 Fusione Stream Dorso
+6 Fusione finale 
+
+
+Per capire la bontà dell'architettura e raccogliere dati per la tesi:
+Bisognerebbe fare prima fare K-fold dividendo i soggetti (e le relative immagini) in training e test
+Poi  fare k-foldi sui 152 soggetti usando un 5-fold cross validation
+
+
+DEcidere se:
+    - Fare addestramento reale solo sull'80% dei soggetti e tenere il 20% per il test o usare il nested k-fold
+    - Applicare il Nested K-Fold
+    
