@@ -104,6 +104,7 @@ RIASSUNTO:
 1 Preprocessing: Normalizzazione e MediaPipe per estrarre landmark mano (verificare che mano ci sia)
                  Ritagliare l'immagine della mano e ruotarla per allineare
                  Usare eventualmente CLAHE (Prima di CLAHE per il dorso separare il canale verde per le vene poichè l'emoglobina assorbe maggiormente la len d'onda del verde)e filtrei per correggere illuminazione ed enfatizzare pattern pelle
+                    -> capire se filtro verde può fornire effettivamente più info
 
 2 Stream Palmo:  Per texture: Transformer ViT-S pre-addestrato con DINOv2 mantenendo pesi del transformer fissi e inserendo un Multi-Layer Perceptron per estrare caratteristiche necessarie
                  Per la sola ROI centrale del palmo: MobileNetV3-Large
@@ -118,10 +119,23 @@ RIASSUNTO:
 
 Per capire la bontà dell'architettura e raccogliere dati per la tesi:
 Bisognerebbe fare prima fare K-fold dividendo i soggetti (e le relative immagini) in training e test
-Poi  fare k-foldi sui 152 soggetti usando un 5-fold cross validation
+Poi  fare k-fold sui 152 soggetti usando un 5-fold cross validation
+
+Forse servirebbe fare nested k-fold visto che si usa 11k hands come dataset e sono solo 190 soggetti.
+
+Per ottimizzare i tempi del training però se si usa nested k-fold:
+1. Pre-processing del dataset 1 volta per tutte le immagini, individuando anche le roi del palmo e delle nocche (conviene salvare sia le coordinate che i ritagli dei ROI palmo e nocche in modo da evitare di evocare MediaPipe)
+2. Passare il dataset pre-processato solo 1 volta a DINOv2 E Swin-Tiny e salvare localmente i vettori delle caratteristiche in modo che MLP lavora sui vettori e non le immagini
+3. Durante i 20 fold addestrare unicamente MobileNetV3-Large e i layer di fusione MLP 
+
+RIVEDERE:
+- Che cos'erano: canali FRIT (ridgelet) handcrafted C'E' RISPOSTA SU CHAT CON CLAUDE
+
 
 
 DEcidere se:
     - Fare addestramento reale solo sull'80% dei soggetti e tenere il 20% per il test o usare il nested k-fold
     - Applicare il Nested K-Fold
-    
+               E' necessario fare dei cicli esterni e interni è diventa computazionalmente pesante
+               
+          
