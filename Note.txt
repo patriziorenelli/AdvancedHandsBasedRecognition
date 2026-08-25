@@ -130,7 +130,7 @@ Per ottimizzare i tempi del training però se si usa nested k-fold:
 
 RIVEDERE:
 - Che cos'erano: canali FRIT (ridgelet) handcrafted C'E' RISPOSTA SU CHAT CON CLAUDE
-
+- Aggiungere data augmentation dinamica durante la fase di training usando le immagini allineate 
 
 
 DEcidere se:
