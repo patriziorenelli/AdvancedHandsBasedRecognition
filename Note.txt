@@ -108,9 +108,11 @@ RIASSUNTO:
 
 2 Stream Palmo:  Per texture: Transformer ViT-S pre-addestrato con DINOv2 mantenendo pesi del transformer fissi e inserendo un Multi-Layer Perceptron per estrare caratteristiche necessarie
                  Per la sola ROI centrale del palmo: MobileNetV3-Large
+                 Per ROI nocche: canali FRIT (ridgelet) handcrafted
 
-3 Stream Dorso:  Per forma: Swin-Tiny bloccato, sfruttando dei filtri per aumentare il contrasto e far risaltare i vasi sanguigni
+3 Stream Dorso:  Per forma (e per le vene se possibile): Swin-Tiny bloccato, sfruttando dei filtri per aumentare il contrasto e far risaltare i vasi sanguigni
                  Per ROI nocche: MobileNetV3-Large analizza i ritagli delle nocche ricavati tramite MediaPipe
+                 
 
 4 Fusione Stream Palmo
 5 Fusione Stream Dorso
