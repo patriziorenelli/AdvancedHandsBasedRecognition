@@ -350,7 +350,6 @@ def rotate_hand_upright(img, coords):
     Allinea la mano usando l'asse Wrist(0) -> Middle MCP(9).
     Dopo la rotazione il dito medio punta verso l'alto.
     """
-
     h, w = img.shape[:2]
 
     wrist = coords[0]
@@ -365,7 +364,9 @@ def rotate_hand_upright(img, coords):
         return None, None, None
 
     current_angle = math.degrees(math.atan2(dy, dx))
-    rotation_angle = -90.0 - current_angle
+    
+    # FORMARA CORRETTA: porta qualsiasi inclinazione a -90 gradi (verticale)
+    rotation_angle = current_angle + 90.0
 
     center = (w / 2.0, h / 2.0)
 
