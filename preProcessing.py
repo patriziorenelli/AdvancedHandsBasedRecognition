@@ -86,7 +86,7 @@ PALM_KNUCKLE_SIZE = (96, 96)
 # Soglie di qualita' / confidenza
 MIN_HANDEDNESS_SCORE = 0.75
 MIN_HAND_AREA_RATIO = 0.02   # bbox mano / area immagine
-MIN_SHARPNESS = 15.0         # varianza Laplaciano, sotto = troppo sfocata
+MIN_SHARPNESS = 5.0          # varianza Laplaciano, sotto = troppo sfocata
 
 
 # ============================================================
@@ -209,6 +209,50 @@ def resize_with_padding(img, target_size=(224, 224), interpolation=None):
     return canvas
 
 
+def resize_with_crop_fill(img, target_size=(224, 224), interpolation=None):
+    """
+    Ridimensiona l'immagine per riempire ESATTAMENTE la canvas
+    target, senza bordi neri e senza alterare l'aspect ratio.
+
+    A differenza di resize_with_padding (che lascia letterbox
+    nero), qui si scala l'immagine con lo scale factor MAGGIORE
+    tra le due dimensioni (scale = max invece di min), cosi' il
+    lato piu' corto riempie comunque il target; l'eccesso sul
+    lato piu' lungo viene poi ritagliato al centro ("cover crop",
+    lo stesso comportamento di CSS object-fit: cover).
+
+    Non equivale a uno stretch/squish: le proporzioni originali
+    sono preservate, si perde solo una porzione periferica
+    dell'immagine (di norma sfondo/margine attorno alla mano,
+    dato il crop gia' stretto fatto a monte).
+    """
+
+    if not valid_image(img):
+        return None
+
+    target_w, target_h = target_size
+    h, w = img.shape[:2]
+
+    if interpolation is None:
+        interpolation = adaptive_interpolation((w, h), target_size)
+
+    # scale = max (non min) -> il lato piu' corto riempie il target,
+    # il lato piu' lungo eccede e viene poi croppato
+    scale = max(target_w / w, target_h / h)
+
+    new_w = max(target_w, int(round(w * scale)))
+    new_h = max(target_h, int(round(h * scale)))
+
+    resized = cv2.resize(img, (new_w, new_h), interpolation=interpolation)
+
+    x_offset = (new_w - target_w) // 2
+    y_offset = (new_h - target_h) // 2
+
+    cropped = resized[y_offset:y_offset + target_h, x_offset:x_offset + target_w]
+
+    return cropped
+
+
 # ============================================================
 # QUALITA' IMMAGINE
 # ============================================================
@@ -269,14 +313,27 @@ def canonicalize_laterality(img, coords, hand_side):
 
 
 # ============================================================
-# STEP 1 - CROP DELLA MANO ORIGINALE
+# STEP 1 - CROP AMPIO DELLA MANO DALLA FOTO ORIGINALE
 # ============================================================
 
-def crop_hand_from_landmarks(img, coords, padding_ratio=0.25):
+def crop_hand_from_landmarks(
+    img,
+    coords,
+    padding_ratio=0.60,
+    min_padding_px=40
+):
     """
-    Ritaglia la mano dall'immagine originale. Il padding viene
-    mantenuto abbastanza grande per evitare di perdere parti
-    anatomiche durante la successiva rotazione.
+    Ritaglia una regione ampia attorno alla mano direttamente
+    dall'immagine originale.
+
+    Il padding disponibile e' costituito da pixel REALI della foto.
+    Se la mano e' troppo vicina al bordo dell'immagine, il crop viene
+    semplicemente limitato ai confini reali: non vengono creati pixel
+    artificiali in questa fase.
+
+    Restituisce anche la quantita' di padding richiesta ma non disponibile,
+    utile per il metadata e per diagnosticare i casi in cui la successiva
+    rotazione potrebbe dover usare il fallback del border mode.
     """
 
     h, w = img.shape[:2]
@@ -286,19 +343,26 @@ def crop_hand_from_landmarks(img, coords, padding_ratio=0.25):
     min_y = float(coords[:, 1].min())
     max_y = float(coords[:, 1].max())
 
-    hand_w = max(max_x - min_x, 20)
-    hand_h = max(max_y - min_y, 20)
+    hand_w = max(max_x - min_x, 20.0)
+    hand_h = max(max_y - min_y, 20.0)
 
-    pad_x = hand_w * padding_ratio
-    pad_y = hand_h * padding_ratio
+    # Margine ampio, preso direttamente dall'immagine originale.
+    pad_x = max(hand_w * padding_ratio, float(min_padding_px))
+    pad_y = max(hand_h * padding_ratio, float(min_padding_px))
 
-    x1 = max(0, int(np.floor(min_x - pad_x)))
-    y1 = max(0, int(np.floor(min_y - pad_y)))
-    x2 = min(w, int(np.ceil(max_x + pad_x)))
-    y2 = min(h, int(np.ceil(max_y + pad_y)))
+    requested_x1 = int(np.floor(min_x - pad_x))
+    requested_y1 = int(np.floor(min_y - pad_y))
+    requested_x2 = int(np.ceil(max_x + pad_x))
+    requested_y2 = int(np.ceil(max_y + pad_y))
+
+    # Limiti realmente disponibili nell'immagine.
+    x1 = max(0, requested_x1)
+    y1 = max(0, requested_y1)
+    x2 = min(w, requested_x2)
+    y2 = min(h, requested_y2)
 
     if x2 <= x1 or y2 <= y1:
-        return None, None, None
+        return None, None, None, None
 
     hand_crop = img[y1:y2, x1:x2].copy()
 
@@ -308,48 +372,30 @@ def crop_hand_from_landmarks(img, coords, padding_ratio=0.25):
 
     bbox = [x1, y1, x2, y2]
 
-    return hand_crop, coords_local, bbox
+    missing_padding = {
+        "left": int(max(0, -requested_x1)),
+        "top": int(max(0, -requested_y1)),
+        "right": int(max(0, requested_x2 - w)),
+        "bottom": int(max(0, requested_y2 - h))
+    }
 
-
-# ============================================================
-# STEP 2 - PADDING SU CANVAS QUADRATA
-# ============================================================
-
-def pad_to_large_square(img, coords, padding_ratio=0.45):
-    """
-    Inserisce la mano in una canvas quadrata piu' grande. Il
-    padding aggiuntivo riduce il rischio di tagliare dita o
-    polso durante la rotazione.
-    """
-
-    h, w = img.shape[:2]
-    side = max(h, w)
-    extra = int(side * padding_ratio)
-    canvas_size = side + 2 * extra
-
-    canvas = np.zeros((canvas_size, canvas_size, 3), dtype=img.dtype)
-
-    x_offset = (canvas_size - w) // 2
-    y_offset = (canvas_size - h) // 2
-
-    canvas[y_offset:y_offset + h, x_offset:x_offset + w] = img
-
-    coords_padded = coords.copy()
-    coords_padded[:, 0] += x_offset
-    coords_padded[:, 1] += y_offset
-
-    return canvas, coords_padded
-
+    return hand_crop, coords_local, bbox, missing_padding
 
 # ============================================================
-# STEP 3 - ROTAZIONE DELLA MANO
+# STEP 2 - ROTAZIONE DELLA MANO
 # ============================================================
 
 def rotate_hand_upright(img, coords):
     """
     Allinea la mano usando l'asse Wrist(0) -> Middle MCP(9).
     Dopo la rotazione il dito medio punta verso l'alto.
+
+    Il crop in input contiene gia' un margine ampio di pixel REALI
+    provenienti dall'immagine originale. BORDER_REFLECT_101 viene quindi
+    usato solo come fallback quando, nonostante il margine disponibile,
+    una zona della rotazione cade oltre il bordo del crop.
     """
+
     h, w = img.shape[:2]
 
     wrist = coords[0]
@@ -364,8 +410,8 @@ def rotate_hand_upright(img, coords):
         return None, None, None
 
     current_angle = math.degrees(math.atan2(dy, dx))
-    
-    # FORMARA CORRETTA: porta qualsiasi inclinazione a -90 gradi (verticale)
+
+    # Porta qualsiasi inclinazione a -90 gradi (verticale).
     rotation_angle = current_angle + 90.0
 
     center = (w / 2.0, h / 2.0)
@@ -373,16 +419,16 @@ def rotate_hand_upright(img, coords):
     M = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
 
     rotated = cv2.warpAffine(
-        img, M, (w, h),
+        img,
+        M,
+        (w, h),
         flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0)
+        borderMode=cv2.BORDER_REFLECT_101
     )
 
     rotated_coords = transform_points(coords, M)
 
     return rotated, rotated_coords, M
-
 
 # ============================================================
 # CROP FINALE DELLA MANO
@@ -430,40 +476,53 @@ def crop_final_hand(img, coords, padding_ratio=0.15):
 def normalize_hand_geometry(
     img,
     original_coords,
-    initial_padding_ratio=0.25,
-    square_padding_ratio=0.45,
+    initial_padding_ratio=0.60,
+    min_padding_px=40,
     final_padding_ratio=0.15
 ):
     """
-    Pipeline: crop originale -> padding quadrato -> rotazione
-    -> crop finale.
+    Pipeline geometrica:
+
+        crop ampio dall'immagine originale
+        -> rotazione
+        -> crop finale.
+
+    Non viene creata alcuna canvas artificiale prima della rotazione.
+    Il margine usato per proteggere la mano durante la rotazione proviene
+    direttamente dall'immagine originale; il border sintetico resta solo
+    come fallback inevitabile per i pixel fuori dal crop.
     """
 
-    hand_crop, local_coords, original_bbox = crop_hand_from_landmarks(
-        img, original_coords, padding_ratio=initial_padding_ratio
+    hand_crop, local_coords, original_bbox, missing_padding = (
+        crop_hand_from_landmarks(
+            img,
+            original_coords,
+            padding_ratio=initial_padding_ratio,
+            min_padding_px=min_padding_px
+        )
     )
 
     if not valid_image(hand_crop):
-        return None, None, None
+        return None, None, None, None
 
-    padded_img, padded_coords = pad_to_large_square(
-        hand_crop, local_coords, padding_ratio=square_padding_ratio
+    rotated_img, rotated_coords, M = rotate_hand_upright(
+        hand_crop,
+        local_coords
     )
 
-    rotated_img, rotated_coords, M = rotate_hand_upright(padded_img, padded_coords)
-
     if not valid_image(rotated_img):
-        return None, None, None
+        return None, None, None, None
 
     final_img, final_coords = crop_final_hand(
-        rotated_img, rotated_coords, padding_ratio=final_padding_ratio
+        rotated_img,
+        rotated_coords,
+        padding_ratio=final_padding_ratio
     )
 
     if not valid_image(final_img):
-        return None, None, None
+        return None, None, None, None
 
-    return final_img, final_coords, original_bbox
-
+    return final_img, final_coords, original_bbox, missing_padding
 
 # ============================================================
 # SAFE RECTANGLE
@@ -858,10 +917,11 @@ def process_single_image(task):
 
         final_padding = 0.22 if is_dorsal else 0.14
 
-        hand_img, coords, original_bbox = normalize_hand_geometry(
-            img, coords_original,
-            initial_padding_ratio=0.25,
-            square_padding_ratio=0.45,
+        hand_img, coords, original_bbox, missing_padding = normalize_hand_geometry(
+            img,
+            coords_original,
+            initial_padding_ratio=0.60,
+            min_padding_px=40,
             final_padding_ratio=final_padding
         )
 
@@ -900,7 +960,7 @@ def process_single_image(task):
 
             # Mano completa -> ViT-S / DINOv2 (forma + texture)
             palm_hand_processed = preprocess_rgb(hand_img, sigma=25, clahe_clip=1.5)
-            palm_hand_processed = resize_with_padding(palm_hand_processed, target_size=VIT_SIZE)
+            palm_hand_processed = resize_with_crop_fill(palm_hand_processed, target_size=VIT_SIZE)
             save_image(out_folder / f"{base_name}_palm_hand.png", palm_hand_processed)
 
             # ROI centrale palmo -> MobileNetV3-Large
@@ -910,7 +970,7 @@ def process_single_image(task):
                 return {"status": "error", "file": str(img_path), "reason": "ROI centrale del palmo non valida"}
 
             palm_roi_processed = preprocess_rgb(central_palm_roi, sigma=20, clahe_clip=1.8)
-            palm_roi_processed = resize_with_padding(palm_roi_processed, target_size=PALM_ROI_SIZE)
+            palm_roi_processed = resize_with_crop_fill(palm_roi_processed, target_size=PALM_ROI_SIZE)
             save_image(out_folder / f"{base_name}_palm_roi.png", palm_roi_processed)
 
             # 12 ROI nocche -> FRIT / Ridgelet (handcrafted)
@@ -922,7 +982,7 @@ def process_single_image(task):
                     continue
 
                 knuckle_processed = preprocess_knuckle(knuckle)
-                knuckle_processed = resize_with_padding(knuckle_processed, target_size=PALM_KNUCKLE_SIZE)
+                knuckle_processed = resize_with_crop_fill(knuckle_processed, target_size=PALM_KNUCKLE_SIZE)
                 save_image(out_folder / f"{base_name}_palm_{roi_name}.png", knuckle_processed)
 
         # ====================================================
@@ -935,7 +995,7 @@ def process_single_image(task):
             # Stessa funzione usata per palm_hand: preserva le
             # statistiche colore attese dal pretraining ImageNet.
             dorsal_hand_processed = preprocess_rgb(hand_img, sigma=25, clahe_clip=1.5)
-            dorsal_hand_processed = resize_with_padding(dorsal_hand_processed, target_size=DORSAL_HAND_SIZE)
+            dorsal_hand_processed = resize_with_crop_fill(dorsal_hand_processed, target_size=DORSAL_HAND_SIZE)
             save_image(out_folder / f"{base_name}_dorsal_hand.png", dorsal_hand_processed)
 
             # 12 ROI nocche dorsali -> MobileNetV3-Large
@@ -947,7 +1007,7 @@ def process_single_image(task):
                     continue
 
                 knuckle_processed = preprocess_rgb(knuckle, sigma=15, clahe_clip=1.5)
-                knuckle_processed = resize_with_padding(knuckle_processed, target_size=DORSAL_KNUCKLE_SIZE)
+                knuckle_processed = resize_with_crop_fill(knuckle_processed, target_size=DORSAL_KNUCKLE_SIZE)
                 save_image(out_folder / f"{base_name}_dorsal_{roi_name}.png", knuckle_processed)
 
         # ====================================================
@@ -963,6 +1023,12 @@ def process_single_image(task):
             "handedness_confidence": round(handedness_score, 4),
             "quality": quality,
             "original_hand_bbox": original_bbox,
+            "rotation_padding": {
+                "missing_from_original": missing_padding,
+                "used_synthetic_fallback": any(
+                    value > 0 for value in missing_padding.values()
+                )
+            },
             "landmarks_original": coords_original.tolist(),
             "landmarks_normalized": coords.tolist(),
             "output_sizes": {
