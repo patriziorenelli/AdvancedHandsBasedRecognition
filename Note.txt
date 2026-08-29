@@ -141,3 +141,6 @@ DEcidere se:
                E' necessario fare dei cicli esterni e interni è diventa computazionalmente pesante
                
           
+Comandi esecuzione:
+py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 60
+
