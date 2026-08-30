@@ -84,9 +84,9 @@ DORSAL_KNUCKLE_SIZE = (224, 224)
 PALM_KNUCKLE_SIZE = (96, 96)
 
 # Soglie di qualita' / confidenza
-MIN_HANDEDNESS_SCORE = 0.75
-MIN_HAND_AREA_RATIO = 0.02   # bbox mano / area immagine
-MIN_SHARPNESS = 5.0          # varianza Laplaciano, sotto = troppo sfocata
+MIN_HANDEDNESS_SCORE = 0.50
+MIN_HAND_AREA_RATIO = 0.01   # bbox mano / area immagine
+MIN_SHARPNESS = 2.0          # varianza Laplaciano, sotto = troppo sfocata
 
 
 # ============================================================
@@ -109,7 +109,7 @@ def init_worker():
         static_image_mode=True,
         max_num_hands=1,
         model_complexity=1,
-        min_detection_confidence=0.6
+        min_detection_confidence=0.10
     )
 
 
@@ -1142,8 +1142,8 @@ def run_async_preprocessing(csv_path, images_dir, output_dir, max_workers=4, chu
 
 if __name__ == "__main__":
 
-    CSV_FILE = r"C:\Users\Admin\Desktop\Tesi\Dataset\11k Hands dataset\HandInfo-test.csv"
-    IMAGES_DIR = r"C:\Users\Admin\Desktop\Tesi\Dataset\11k Hands dataset\Hands-test"
+    CSV_FILE = r"C:\Users\Admin\Desktop\Tesi\Dataset\11k Hands dataset\HandInfo.csv"
+    IMAGES_DIR = r"C:\Users\Admin\Desktop\Tesi\Dataset\11k Hands dataset\Hands"
     OUTPUT_DIR = "./dataset_preprocessed"
     NUM_WORKERS = os.cpu_count()
 

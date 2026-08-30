@@ -142,5 +142,16 @@ DEcidere se:
                
           
 Comandi esecuzione:
-py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 60
+py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 50
 
+IMPLEMENTARE NESTED K-FOLD SUL CODICE DEL TRAINING DEL PALMO 
+
+
+!!! DATASET COMPLETAMENTE PRE-PROCESSATO !!!
+
+Risultati preprocessing:
+     SUCCESS: 10861
+     SKIPPED: 215
+     - Nessuna mano rilevata: 214
+     - Bounding box mano troppo piccola (0.0025): 1
+     ERRORS: 0
