@@ -143,7 +143,7 @@ DEcidere se:
           
 Comandi esecuzione:
 py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 50
-
+py palm_run.py nested_cv --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 3 --inner_epochs 20 --outer_epochs 50 --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
 IMPLEMENTARE NESTED K-FOLD SUL CODICE DEL TRAINING DEL PALMO 
 
 

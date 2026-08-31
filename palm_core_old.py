@@ -63,14 +63,8 @@ class Config:
     ARC_MARGIN = 0.30
     ARC_SCALE = 30.0
     CHECKPOINT_EVERY_EPOCHS = 5
-    VAL_SPLIT = 0.15           # usato solo dal training semplice
+    VAL_SPLIT = 0.15           # frazione di SOGGETTI (non campioni) per validazione
     SEED = 42
-
-    # Nested K-Fold (sempre PER SOGGETTO, mai per singolo campione)
-    OUTER_FOLDS = 5
-    INNER_FOLDS = 4
-    INNER_EPOCHS = 25
-    OUTER_EPOCHS = 60
 
     VERIFICATION_THRESHOLD = 0.55   # da ricalibrare via EER sul proprio dataset
 
@@ -355,59 +349,13 @@ class PalmBiometricDataset(Dataset):
         }
 
 
-def list_subjects(data_dir):
-    """Ritorna gli ID soggetto ordinati presenti nel dataset."""
-    return sorted(d.name for d in Path(data_dir).iterdir() if d.is_dir())
-
-
-def kfold_subject_splits(subject_ids, n_splits: int, seed: int = cfg.SEED):
-    """
-    K-Fold deterministico PER SOGGETTO.
-
-    Ogni split restituisce:
-        (fold_index, train_subjects, test_subjects)
-
-    Non viene mai spezzata l'identita' tra train e test, evitando leakage
-    biometrico tra acquisizioni dello stesso soggetto.
-    """
-    subjects = list(subject_ids)
-    if n_splits < 2:
-        raise ValueError("n_splits deve essere >= 2")
-    if len(subjects) < n_splits:
-        raise ValueError(
-            f"Servono almeno {n_splits} soggetti per il K-Fold, trovati {len(subjects)}"
-        )
-
-    rng = np.random.RandomState(seed)
-    subjects = np.array(sorted(subjects), dtype=object)
-    rng.shuffle(subjects)
-
-    fold_sizes = np.full(n_splits, len(subjects) // n_splits, dtype=int)
-    fold_sizes[: len(subjects) % n_splits] += 1
-
-    current = 0
-    for fold_idx, fold_size in enumerate(fold_sizes, start=1):
-        test_subjects = subjects[current: current + fold_size].tolist()
-        train_subjects = np.concatenate(
-            [subjects[:current], subjects[current + fold_size:]]
-        ).tolist()
-        current += fold_size
-        yield fold_idx, train_subjects, test_subjects
-
-
 def split_subjects(data_dir, val_split: float = cfg.VAL_SPLIT, seed: int = cfg.SEED):
-    """
-    Split semplice PER SOGGETTO.
-
-    Mantiene la compatibilita' con il comando train classico.
-    Per una valutazione scientificamente corretta usare nested_cv.
-    """
+    """Split PER SOGGETTO (non per campione): evita che la stessa identita' finisca in train e val."""
     rng = np.random.RandomState(seed)
-    subjects = list_subjects(data_dir)
+    subjects = sorted(d.name for d in Path(data_dir).iterdir() if d.is_dir())
     rng.shuffle(subjects)
     n_val = max(1, int(len(subjects) * val_split))
     return subjects[n_val:], subjects[:n_val]   # train, val
-
 
 
 # ============================================================
