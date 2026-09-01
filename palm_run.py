@@ -25,9 +25,12 @@ python palm_run.py verify --checkpoint models_final/palm_embedding_best.pt \
 
 from __future__ import annotations
 import argparse
+import datetime
 import itertools
 import json
+import platform
 import time
+import uuid
 from pathlib import Path
 
 import cv2
@@ -234,10 +237,68 @@ def init_csv_logger(path):
     return log_row, f
 
 
+# ============================================================
+# RUN LOGGER (JSON Lines)
+# ============================================================
+class RunLogger:
+    """
+    Logger di run in formato JSON Lines (un evento JSON per riga, facile
+    da leggere/streamare/analizzare con pandas: pd.read_json(path, lines=True)).
+
+    Raccoglie in un unico file:
+      - configurazione/iperparametri del comando lanciato (run_start)
+      - i dati effettivamente usati per train/eval (subject id, n campioni,
+        n classi, n_knuckles, split, ecc.) (dataset)
+      - le metriche epoca-per-epoca durante il training (epoch)
+      - le metriche di valutazione/selezione iperparametri (evaluation)
+      - il risultato finale del run, checkpoint incluso (run_end)
+
+    Non sostituisce il CSV per-epoca gia' presente (init_csv_logger):
+    lo affianca con una traccia strutturata e completa dell'intero run.
+    """
+
+    def __init__(self, path, run_type, config=None):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.run_id = uuid.uuid4().hex[:12]
+        self.run_type = run_type
+        self._file = open(self.path, "a", encoding="utf-8")
+        self.log_event(
+            "run_start",
+            config=config or {},
+            device=str(cfg.DEVICE),
+            python_version=platform.python_version(),
+            torch_version=torch.__version__,
+            cuda_available=torch.cuda.is_available(),
+        )
+
+    def log_event(self, event, **data):
+        record = {
+            "run_id": self.run_id,
+            "run_type": self.run_type,
+            "event": event,
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            **data,
+        }
+        self._file.write(json.dumps(record, default=str) + "\n")
+        self._file.flush()
+        return record
+
+    def close(self, status="completed", **final_data):
+        self.log_event("run_end", status=status, **final_data)
+        self._file.close()
+
+
+def default_run_log_path(subdir="logs", prefix="run"):
+    """Percorso di default per il file di log di un run: logs/<prefix>_<timestamp>_<id>.jsonl"""
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return cfg.FINAL_MODEL_DIR / subdir / f"{prefix}_{ts}_{uuid.uuid4().hex[:6]}.jsonl"
+
+
 def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 freeze_vit, freeze_mobilenet, seed,
                 eval_subjects=None, verbose=True, select_best_on_eval=True,
-                log_csv_path=None):
+                log_csv_path=None, run_logger=None, run_logger_tag=None):
     """
     Addestra un modello su train_subjects.
 
@@ -253,6 +314,26 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     )
     if len(train_ds) == 0:
         raise RuntimeError("Dataset di training vuoto per questo fold")
+
+    if run_logger is not None:
+        run_logger.log_event(
+            "dataset",
+            tag=run_logger_tag,
+            data_dir=str(data_dir),
+            n_train_subjects=len(train_subjects),
+            train_subjects=list(train_subjects),
+            n_train_samples=len(train_ds),
+            num_classes=train_ds.num_classes,
+            n_knuckles=n_knuckles,
+            n_eval_subjects=len(eval_subjects) if eval_subjects is not None else 0,
+            eval_subjects=list(eval_subjects) if eval_subjects is not None else [],
+            n_eval_samples=len(eval_ds) if eval_ds is not None else 0,
+            hyperparameters={
+                "epochs": epochs, "batch_size": batch_size, "lr": lr,
+                "freeze_vit": freeze_vit, "freeze_mobilenet": freeze_mobilenet,
+                "seed": seed,
+            },
+        )
 
     train_loader = make_loader(train_ds, batch_size, shuffle=True, drop_last=True)
     eval_loader = (
@@ -322,7 +403,6 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
             print(msg)
 
         if log_row is not None:
-            import datetime
             log_row({
                 "epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
                 "eval_eer": metrics["eer"] if metrics else "",
@@ -330,6 +410,18 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 "lr": scheduler.get_last_lr()[0], "epoch_seconds": round(dt, 2),
                 "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             })
+
+        if run_logger is not None:
+            run_logger.log_event(
+                "epoch",
+                tag=run_logger_tag,
+                epoch=epoch, epochs=epochs,
+                train_loss=train_loss, train_acc=train_acc,
+                eval_eer=metrics["eer"] if metrics else None,
+                eval_eer_threshold=metrics["eer_threshold"] if metrics else None,
+                is_best_so_far=bool(metrics is not None and metrics["eer"] == best_eer),
+                lr=scheduler.get_last_lr()[0], epoch_seconds=round(dt, 2),
+            )
 
     if log_file is not None:
         log_file.close()
@@ -350,6 +442,16 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
         best_epoch = epochs
         best_eer = None
 
+    if run_logger is not None:
+        run_logger.log_event(
+            "evaluation",
+            tag=run_logger_tag,
+            best_epoch=best_epoch,
+            best_eer=best_eer,
+            final_eer=final_metrics["eer"] if final_metrics else None,
+            final_eer_threshold=final_metrics["eer_threshold"] if final_metrics else None,
+        )
+
     return {
         "model": model,
         "head": head,
@@ -369,25 +471,35 @@ def cmd_train(args):
     device = cfg.DEVICE
     print(f"Device: {device}")
 
+    run_log_path = default_run_log_path(prefix="train")
+    run_logger = RunLogger(run_log_path, run_type="train", config=vars(args))
+    print(f"Run log: {run_log_path}")
+
     train_subjects, val_subjects = split_subjects(args.data_dir)
     print(
         f"Soggetti train: {len(train_subjects)} | "
         f"Soggetti validation (open-set): {len(val_subjects)}"
     )
 
-    result = train_model(
-        train_subjects=train_subjects,
-        data_dir=args.data_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        freeze_vit=args.freeze_vit,
-        freeze_mobilenet=args.freeze_mobilenet,
-        seed=cfg.SEED,
-        eval_subjects=val_subjects,
-        verbose=True,
-        log_csv_path=cfg.FINAL_MODEL_DIR / "train_log.csv",
-    )
+    try:
+        result = train_model(
+            train_subjects=train_subjects,
+            data_dir=args.data_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            freeze_vit=args.freeze_vit,
+            freeze_mobilenet=args.freeze_mobilenet,
+            seed=cfg.SEED,
+            eval_subjects=val_subjects,
+            verbose=True,
+            log_csv_path=cfg.FINAL_MODEL_DIR / "train_log.csv",
+            run_logger=run_logger,
+            run_logger_tag="simple_train",
+        )
+    except Exception as exc:
+        run_logger.close(status="failed", error=str(exc))
+        raise
 
     model = result["model"]
     head = result["head"]
@@ -403,7 +515,15 @@ def cmd_train(args):
         extra={"training_mode": "simple_subject_split"},
     )
 
+    run_logger.close(
+        status="completed",
+        checkpoint=str(final_path),
+        best_epoch=result["best_epoch"],
+        best_eer=best_eer,
+    )
+
     print(f"\nTraining completato. Modello finale: {final_path}")
+    print(f"Log completo del run: {run_log_path}")
     if result["metrics"]:
         print(
             f"EER validation open-set: {result['metrics']['eer']*100:.2f}% "
@@ -429,7 +549,7 @@ def make_hyperparameter_grid(args):
     return grid
 
 
-def inner_model_selection(outer_train_subjects, args, outer_fold):
+def inner_model_selection(outer_train_subjects, args, outer_fold, run_logger=None):
     """
     INNER LOOP:
     - nessun soggetto dell'outer test entra qui;
@@ -479,6 +599,8 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
                 verbose=args.verbose_inner,
                 log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" /
                     f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
+                run_logger=run_logger,
+                run_logger_tag=f"outer{outer_fold}_cand{cand_idx}_inner{inner_fold}",
             )
 
             metrics = result["metrics"]
@@ -518,6 +640,18 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
             f"  ==> Candidato {cand_idx}: mean EER={mean_eer*100:.2f}% "
             f"+/- {std_eer*100:.2f}% | epoch finale suggerita={mean_epoch}"
         )
+
+        if run_logger is not None:
+            run_logger.log_event(
+                "inner_candidate_result",
+                outer_fold=outer_fold,
+                candidate_index=cand_idx,
+                hyperparameters=hp,
+                mean_eer=mean_eer,
+                std_eer=std_eer,
+                fold_eers=fold_eers,
+                mean_best_epoch=mean_epoch,
+            )
 
     # Tie-break: prima EER medio, poi deviazione standard.
     candidate_results.sort(key=lambda x: (x["mean_eer"], x["std_eer"]))
@@ -567,6 +701,15 @@ def cmd_nested_cv(args):
     output_dir = cfg.FINAL_MODEL_DIR / "nested_cv"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    run_log_path = default_run_log_path(subdir="nested_cv/logs", prefix="nested_cv")
+    run_logger = RunLogger(run_log_path, run_type="nested_cv", config=vars(args))
+    run_logger.log_event(
+        "dataset_overview",
+        data_dir=str(args.data_dir),
+        n_subjects=len(all_subjects),
+        subjects=list(all_subjects),
+    )
+
     print("\n" + "=" * 72)
     print("NESTED K-FOLD - PALM BIOMETRIC EMBEDDING")
     print("=" * 72)
@@ -577,6 +720,7 @@ def cmd_nested_cv(args):
     print(f"Inner epochs: {args.inner_epochs}")
     print(f"Outer epochs: {args.outer_epochs}")
     print(f"Output: {output_dir}")
+    print(f"Run log: {run_log_path}")
 
     outer_results = []
 
@@ -592,7 +736,7 @@ def cmd_nested_cv(args):
 
         # 1) INNER CV: selezione iperparametri.
         best_hp, all_candidates = inner_model_selection(
-            outer_train, args, outer_fold
+            outer_train, args, outer_fold, run_logger=run_logger
         )
 
         # 2) Refit sul 100% dei soggetti dell'outer training set.
@@ -620,6 +764,8 @@ def cmd_nested_cv(args):
             verbose=True,
             select_best_on_eval=False,   # l'outer test NON influenza il training
             log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" / f"train_log_outer{outer_fold:02d}_refit.csv",
+            run_logger=run_logger,
+            run_logger_tag=f"outer{outer_fold}_refit",
         )
 
         test_metrics = final_result["metrics"]
@@ -657,6 +803,8 @@ def cmd_nested_cv(args):
             "checkpoint": str(fold_path),
         }
         outer_results.append(fold_result)
+
+        run_logger.log_event("outer_fold_result", **fold_result)
 
         print(
             f"\n[OUTER {outer_fold}] FINAL TEST (mai usato nell'inner CV): "
@@ -707,6 +855,9 @@ def cmd_nested_cv(args):
     print(f"Min EER: {eers.min()*100:.2f}% | Max EER: {eers.max()*100:.2f}%")
     print(f"Threshold EER medio (solo descrittivo): {thresholds.mean():.3f}")
     print(f"Summary JSON: {summary_path}")
+    print(f"Log completo del run: {run_log_path}")
+
+    run_logger.close(status="completed", summary=summary["summary"], summary_json=str(summary_path))
 
 
 # ============================================================
@@ -810,6 +961,9 @@ class PalmVerifier:
 
 
 def cmd_verify(args):
+    run_log_path = default_run_log_path(subdir="logs", prefix="verify")
+    run_logger = RunLogger(run_log_path, run_type="verify", config=vars(args))
+
     verifier = PalmVerifier(args.checkpoint)
     result = verifier.verify(
         args.base1, args.base2, threshold=args.threshold
@@ -823,6 +977,16 @@ def cmd_verify(args):
         f"\n>>> {verdict}  (similarity={result['similarity']:.4f}, "
         f"soglia={result['threshold']:.4f})"
     )
+    print(f"Log del run: {run_log_path}")
+
+    run_logger.log_event(
+        "verify_result",
+        checkpoint=args.checkpoint,
+        base1=args.base1,
+        base2=args.base2,
+        **result,
+    )
+    run_logger.close(status="completed", **result)
 
 
 # ============================================================

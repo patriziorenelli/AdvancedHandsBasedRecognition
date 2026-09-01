@@ -141,10 +141,10 @@ DEcidere se:
                E' necessario fare dei cicli esterni e interni è diventa computazionalmente pesante
                
           
-Comandi esecuzione:
+Comandi esecuzione: 20 EPOCHE SONO TROPPE ABBASSARLE A 15 
 py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 50
 py palm_run.py nested_cv --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 3 --inner_epochs 20 --outer_epochs 50 --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
-
+pc: py palm_run.py nested_cv --data_dir D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 3 --inner_epochs 20 --outer_epochs 50 --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
 
 python dorsal_run.py nested_cv --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 4 --inner_epochs 20 --outer_epochs 40 --batch_size 32 --lr_grid 0.0001,0.0003 --freeze_swin_grid true --freeze_mobilenet_grid false,true --verbose_inner
 
@@ -156,3 +156,6 @@ Risultati preprocessing:
      - Nessuna mano rilevata: 214
      - Bounding box mano troppo piccola (0.0025): 1
      ERRORS: 0
+
+ON WORKING:
+Training palmo eseguendo palm_run 

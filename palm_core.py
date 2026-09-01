@@ -301,7 +301,18 @@ class PalmBiometricDataset(Dataset):
 
         for sdir in all_subject_dirs:
             for meta_path in sorted(sdir.glob("*_metadata.json")):
-                meta = json.load(open(meta_path, "r", encoding="utf-8"))
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+
+                except UnicodeDecodeError:
+                    try:
+                        with open(meta_path, "r", encoding="utf-16") as f:
+                            meta = json.load(f)
+
+                    except UnicodeDecodeError:
+                        with open(meta_path, "r", encoding="utf-8-sig") as f:
+                            meta = json.load(f)
                 if meta.get("is_dorsal", False):
                     continue
                 base = meta_path.name.replace("_metadata.json", "")
