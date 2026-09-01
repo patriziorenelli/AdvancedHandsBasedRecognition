@@ -1,25 +1,25 @@
 """
 ============================================================
-PALM_RUN - Training + Nested K-Fold + Inferenza
+DORSAL_RUN - Training + Nested K-Fold + Inferenza
 ============================================================
 
 Comandi principali:
 
 # Training semplice (split train/validation per soggetto)
-python palm_run.py train --data_dir dataset_preprocessed --epochs 60
+python dorsal_run.py train --data_dir dataset_preprocessed --epochs 60
 
 # Nested K-Fold:
 # Outer K-Fold = valutazione finale
 # Inner K-Fold = selezione iperparametri
-python palm_run.py nested_cv --data_dir dataset_preprocessed \
+python dorsal_run.py nested_cv --data_dir dataset_preprocessed \
     --outer_folds 5 --inner_folds 4 \
     --inner_epochs 25 --outer_epochs 60 \
     --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
 
 # Verifica 1:1
-python palm_run.py verify --checkpoint models_final/palm_embedding_best.pt \
-    --base1 dataset_preprocessed/0001/0001_palmar_001 \
-    --base2 dataset_preprocessed/0001/0001_palmar_002
+python dorsal_run.py verify --checkpoint models_final_dorsal/dorsal_embedding_best.pt \
+    --base1 dataset_preprocessed/0001/0001_dorsal_001 \
+    --base2 dataset_preprocessed/0001/0001_dorsal_002
 ============================================================
 """
 
@@ -37,10 +37,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from palm_core import (
-    cfg, compute_frit_channels, rgb_transform,
-    PalmEmbeddingNet, ArcMarginHead,
-    PalmBiometricDataset, split_subjects, compute_eer,
+from dorsal_core import (
+    cfg, dorsal_hand_transform, knuckle_transform,
+    DorsalEmbeddingNet, ArcMarginHead,
+    DorsalBiometricDataset, split_subjects, compute_eer,
     list_subjects, kfold_subject_splits,
 )
 
@@ -136,14 +136,13 @@ def train_one_epoch(model, head, loader, optimizer, criterion, device, epoch, lo
     t0 = time.time()
 
     for step, batch in enumerate(loader):
-        palm_hand = batch["palm_hand"].to(device, non_blocking=True)
-        palm_roi = batch["palm_roi"].to(device, non_blocking=True)
+        dorsal_hand = batch["dorsal_hand"].to(device, non_blocking=True)
         knuckles = batch["knuckles"].to(device, non_blocking=True)
         knuckle_mask = batch["knuckle_mask"].to(device, non_blocking=True)
         labels = batch["label"].to(device, non_blocking=True)
 
         optimizer.zero_grad(set_to_none=True)
-        emb = model(palm_hand, palm_roi, knuckles, knuckle_mask)
+        emb = model(dorsal_hand, knuckles, knuckle_mask)
         logits = head(emb, labels)
         loss = criterion(logits, labels)
         loss.backward()
@@ -176,8 +175,7 @@ def evaluate_open_set(model, loader, device):
 
     for batch in loader:
         emb = model(
-            batch["palm_hand"].to(device, non_blocking=True),
-            batch["palm_roi"].to(device, non_blocking=True),
+            batch["dorsal_hand"].to(device, non_blocking=True),
             batch["knuckles"].to(device, non_blocking=True),
             batch["knuckle_mask"].to(device, non_blocking=True),
         )
@@ -191,12 +189,12 @@ def evaluate_open_set(model, loader, device):
 
 def build_datasets(data_dir, train_subjects, eval_subjects=None,
                    n_knuckles_max=None):
-    train_ds = PalmBiometricDataset(
+    train_ds = DorsalBiometricDataset(
         data_dir, subject_ids=train_subjects, train=True
     )
     eval_ds = None
     if eval_subjects is not None:
-        eval_ds = PalmBiometricDataset(
+        eval_ds = DorsalBiometricDataset(
             data_dir, subject_ids=eval_subjects, train=False
         )
 
@@ -214,30 +212,9 @@ def build_datasets(data_dir, train_subjects, eval_subjects=None,
     return train_ds, eval_ds, n_knuckles_max
 
 
-def init_csv_logger(path):
-    """Crea/apre un CSV di log epoca-per-epoca. Ritorna una funzione log_row(dict)."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    is_new = not path.exists()
-    f = open(path, "a", newline="", encoding="utf-8")
-    import csv
-    fieldnames = ["epoch", "train_loss", "train_acc", "eval_eer",
-                  "eval_eer_threshold", "lr", "epoch_seconds", "timestamp"]
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    if is_new:
-        writer.writeheader()
-
-    def log_row(row):
-        writer.writerow({k: row.get(k, "") for k in fieldnames})
-        f.flush()
-
-    return log_row, f
-
-
 def train_model(train_subjects, data_dir, epochs, batch_size, lr,
-                freeze_vit, freeze_mobilenet, seed,
-                eval_subjects=None, verbose=True, select_best_on_eval=True,
-                log_csv_path=None):
+                freeze_swin, freeze_mobilenet, seed,
+                eval_subjects=None, verbose=True, select_best_on_eval=True):
     """
     Addestra un modello su train_subjects.
 
@@ -260,10 +237,10 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
         if eval_ds is not None and len(eval_ds) > 0 else None
     )
 
-    model = PalmEmbeddingNet(
+    model = DorsalEmbeddingNet(
         n_knuckles,
         cfg.EMBEDDING_DIM,
-        freeze_vit=freeze_vit,
+        freeze_swin=freeze_swin,
         freeze_mobilenet=freeze_mobilenet,
     ).to(device)
 
@@ -282,10 +259,6 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     best_epoch = 0
     best_model_state = None
     best_head_state = None
-
-    log_row, log_file = (None, None)
-    if log_csv_path is not None:
-        log_row, log_file = init_csv_logger(log_csv_path)
 
     for epoch in range(1, epochs + 1):
         train_loss, train_acc, dt = train_one_epoch(
@@ -320,19 +293,6 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                     f"@thr={metrics['eer_threshold']:.3f}"
                 )
             print(msg)
-
-        if log_row is not None:
-            import datetime
-            log_row({
-                "epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
-                "eval_eer": metrics["eer"] if metrics else "",
-                "eval_eer_threshold": metrics["eer_threshold"] if metrics else "",
-                "lr": scheduler.get_last_lr()[0], "epoch_seconds": round(dt, 2),
-                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-            })
-
-    if log_file is not None:
-        log_file.close()
 
     # Con validation ripristiniamo l'epoca migliore.
     if best_model_state is not None:
@@ -381,12 +341,11 @@ def cmd_train(args):
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
-        freeze_vit=args.freeze_vit,
+        freeze_swin=args.freeze_swin,
         freeze_mobilenet=args.freeze_mobilenet,
         seed=cfg.SEED,
         eval_subjects=val_subjects,
         verbose=True,
-        log_csv_path=cfg.FINAL_MODEL_DIR / "train_log.csv",
     )
 
     model = result["model"]
@@ -394,7 +353,7 @@ def cmd_train(args):
     train_ds = result["train_ds"]
     best_eer = result["metrics"]["eer"] if result["metrics"] else float("nan")
 
-    final_path = cfg.FINAL_MODEL_DIR / "palm_embedding_final.pt"
+    final_path = cfg.FINAL_MODEL_DIR / "dorsal_embedding_final.pt"
     save_checkpoint(
         final_path, result["best_epoch"], model, head,
         optimizer=None, scheduler=None, best_eer=best_eer,
@@ -416,14 +375,14 @@ def cmd_train(args):
 # ============================================================
 def make_hyperparameter_grid(args):
     grid = []
-    for lr, freeze_vit, freeze_mobilenet in itertools.product(
+    for lr, freeze_swin, freeze_mobilenet in itertools.product(
         args.lr_grid,
-        args.freeze_vit_grid,
+        args.freeze_swin_grid,
         args.freeze_mobilenet_grid,
     ):
         grid.append({
             "lr": float(lr),
-            "freeze_vit": bool(freeze_vit),
+            "freeze_swin": bool(freeze_swin),
             "freeze_mobilenet": bool(freeze_mobilenet),
         })
     return grid
@@ -448,7 +407,7 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
     for cand_idx, hp in enumerate(candidates, start=1):
         print(
             f"\n  Candidato {cand_idx}/{len(candidates)}: "
-            f"lr={hp['lr']} freeze_vit={hp['freeze_vit']} "
+            f"lr={hp['lr']} freeze_swin={hp['freeze_swin']} "
             f"freeze_mobilenet={hp['freeze_mobilenet']}"
         )
 
@@ -472,13 +431,11 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
                 epochs=args.inner_epochs,
                 batch_size=args.batch_size,
                 lr=hp["lr"],
-                freeze_vit=hp["freeze_vit"],
+                freeze_swin=hp["freeze_swin"],
                 freeze_mobilenet=hp["freeze_mobilenet"],
                 seed=cfg.SEED + outer_fold * 10000 + cand_idx * 100 + inner_fold,
                 eval_subjects=inner_val,
                 verbose=args.verbose_inner,
-                log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" /
-                    f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
             )
 
             metrics = result["metrics"]
@@ -525,7 +482,7 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
 
     print(
         f"\n  >>> BEST OUTER {outer_fold}: "
-        f"lr={best['lr']} freeze_vit={best['freeze_vit']} "
+        f"lr={best['lr']} freeze_swin={best['freeze_swin']} "
         f"freeze_mobilenet={best['freeze_mobilenet']} "
         f"| inner mean EER={best['mean_eer']*100:.2f}%"
     )
@@ -568,7 +525,7 @@ def cmd_nested_cv(args):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n" + "=" * 72)
-    print("NESTED K-FOLD - PALM BIOMETRIC EMBEDDING")
+    print("NESTED K-FOLD - DORSAL BIOMETRIC EMBEDDING")
     print("=" * 72)
     print(f"Device: {device}")
     print(f"Soggetti totali: {len(all_subjects)}")
@@ -613,20 +570,19 @@ def cmd_nested_cv(args):
             epochs=final_epochs,
             batch_size=args.batch_size,
             lr=best_hp["lr"],
-            freeze_vit=best_hp["freeze_vit"],
+            freeze_swin=best_hp["freeze_swin"],
             freeze_mobilenet=best_hp["freeze_mobilenet"],
             seed=cfg.SEED + outer_fold * 99999,
             eval_subjects=outer_test,  # SOLO valutazione finale
             verbose=True,
             select_best_on_eval=False,   # l'outer test NON influenza il training
-            log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" / f"train_log_outer{outer_fold:02d}_refit.csv",
         )
 
         test_metrics = final_result["metrics"]
         if test_metrics is None:
             raise RuntimeError(f"Impossibile calcolare EER sull'outer fold {outer_fold}")
 
-        fold_path = output_dir / f"palm_outer_fold_{outer_fold:02d}.pt"
+        fold_path = output_dir / f"dorsal_outer_fold_{outer_fold:02d}.pt"
         save_checkpoint(
             fold_path,
             final_result["best_epoch"],
@@ -712,19 +668,20 @@ def cmd_nested_cv(args):
 # ============================================================
 # INFERENZA / VERIFICA
 # ============================================================
-class PalmVerifier:
+class DorsalVerifier:
     def __init__(self, checkpoint_path, device=None):
         self.device = device or cfg.DEVICE
         ckpt = torch.load(checkpoint_path, map_location=self.device)
         self.n_knuckles = ckpt["n_knuckles"]
-        self.model = PalmEmbeddingNet(
+        self.model = DorsalEmbeddingNet(
             self.n_knuckles,
             ckpt.get("embedding_dim", cfg.EMBEDDING_DIM),
-            freeze_vit=True,
+            freeze_swin=True,
         ).to(self.device)
         self.model.load_state_dict(ckpt["model_state"])
         self.model.eval()
-        self.rgb_tf = rgb_transform(train=False)
+        self.hand_tf = dorsal_hand_transform(train=False)
+        self.knuckle_tf = knuckle_transform(train=False)
         print(
             f"Modello caricato da {checkpoint_path} "
             f"(epoch {ckpt['epoch']}, best_eer={ckpt.get('best_eer', float('nan')):.4f})"
@@ -733,48 +690,42 @@ class PalmVerifier:
     def _load_sample(self, base_path):
         base_path = Path(base_path)
         folder, prefix = base_path.parent, base_path.name
-        hand_path = folder / f"{prefix}_palm_hand.png"
-        roi_path = folder / f"{prefix}_palm_roi.png"
+        hand_path = folder / f"{prefix}_dorsal_hand.png"
         knuckle_paths = [
-            p for p in sorted(folder.glob(f"{prefix}_palm_*.png"))
-            if p.name not in (hand_path.name, roi_path.name)
+            p for p in sorted(folder.glob(f"{prefix}_dorsal_*.png"))
+            if p.name != hand_path.name
         ]
 
-        if not hand_path.exists() or not roi_path.exists():
+        if not hand_path.exists():
             raise FileNotFoundError(
-                f"File mancanti per {base_path} (palm_hand/palm_roi)"
+                f"File mancante per {base_path} (dorsal_hand)"
             )
 
-        palm_hand = self.rgb_tf(
+        dorsal_hand = self.hand_tf(
             cv2.cvtColor(cv2.imread(str(hand_path)), cv2.COLOR_BGR2RGB)
-        ).unsqueeze(0)
-        palm_roi = self.rgb_tf(
-            cv2.cvtColor(cv2.imread(str(roi_path)), cv2.COLOR_BGR2RGB)
         ).unsqueeze(0)
 
         knuckles = torch.zeros(
-            1, self.n_knuckles, 6, *cfg.PALM_KNUCKLE_SIZE
+            1, self.n_knuckles, 3, *cfg.DORSAL_KNUCKLE_SIZE
         )
         mask = torch.zeros(1, self.n_knuckles)
 
         for i, kp in enumerate(knuckle_paths[:self.n_knuckles]):
-            knuckles[0, i] = torch.from_numpy(
-                compute_frit_channels(cv2.imread(str(kp)))
-            )
+            img = cv2.cvtColor(cv2.imread(str(kp)), cv2.COLOR_BGR2RGB)
+            knuckles[0, i] = self.knuckle_tf(img)
             mask[0, i] = 1.0
 
         return (
-            palm_hand.to(self.device),
-            palm_roi.to(self.device),
+            dorsal_hand.to(self.device),
             knuckles.to(self.device),
             mask.to(self.device),
         )
 
     @torch.no_grad()
     def embed(self, base_path) -> torch.Tensor:
-        palm_hand, palm_roi, knuckles, mask = self._load_sample(base_path)
+        dorsal_hand, knuckles, mask = self._load_sample(base_path)
         return self.model(
-            palm_hand, palm_roi, knuckles, mask
+            dorsal_hand, knuckles, mask
         ).squeeze(0).cpu()
 
     @torch.no_grad()
@@ -810,7 +761,7 @@ class PalmVerifier:
 
 
 def cmd_verify(args):
-    verifier = PalmVerifier(args.checkpoint)
+    verifier = DorsalVerifier(args.checkpoint)
     result = verifier.verify(
         args.base1, args.base2, threshold=args.threshold
     )
@@ -830,7 +781,7 @@ def cmd_verify(args):
 # ============================================================
 def main():
     parser = argparse.ArgumentParser(
-        description="Training + Nested K-Fold + inferenza embedding biometrico palmo"
+        description="Training + Nested K-Fold + inferenza embedding biometrico dorso"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -842,7 +793,7 @@ def main():
     p_train.add_argument("--epochs", type=int, default=cfg.EPOCHS)
     p_train.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE)
     p_train.add_argument("--lr", type=float, default=cfg.LR)
-    p_train.add_argument("--freeze_vit", type=parse_bool, default=True)
+    p_train.add_argument("--freeze_swin", type=parse_bool, default=True)
     p_train.add_argument("--freeze_mobilenet", type=parse_bool, default=False)
     p_train.set_defaults(func=cmd_train)
 
@@ -865,7 +816,7 @@ def main():
         help="es. 0.0001,0.0003",
     )
     p_nested.add_argument(
-        "--freeze_vit_grid", type=parse_bool_grid, default=[True],
+        "--freeze_swin_grid", type=parse_bool_grid, default=[True],
         help="es. true,false",
     )
     p_nested.add_argument(
