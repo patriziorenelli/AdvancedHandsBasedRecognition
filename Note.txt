@@ -11,89 +11,6 @@ Per quanto riguarda invece il dorso della mano, lo stream si dovrebbe concentrar
 
 Un passaggio finale consiste nella fusione dei dati provenienti dai singoli maco-stream, attraverso un modulo di fusione, da usare come identificato biometrico della mano per riconoscere l’identità dell’utente.
 
-
-┌───────────────────────────────┐
-│         INPUT IMAGE           │
-│         Immagine mano         │
-└───────────────┬───────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────────┐
-│              PREPROCESSING                  │
-│                                             │
-│ • Normalizzazione dell'immagine             │
-│ • MediaPipe Hand Landmarks                  │
-│ • Allineamento e rotazione della mano       │
-│ • Estrazione delle ROI                      │
-│ • CLAHE e filtri                            │
-│ • Correzione illuminazione                  │
-│ • Enfatizzazione texture, pieghe e vene     │
-└───────────────────┬─────────────────────────┘
-                    │
-          ┌─────────┴──────────┐
-          │                    │
-          ▼                    ▼
-┌───────────────────┐  ┌───────────────────┐
-│   STREAM PALMO    │  │   STREAM DORSO    │
-└─────────┬─────────┘  └─────────┬─────────┘
-          │                      │
-          │                      │
-     ┌────┴────┐            ┌────┴─────┐
-     │         │            │          │
-     ▼         ▼            ▼          ▼
-
- ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
- │Efficient │ │ViT-S +   │ │ Swin-T   │ │ EfficientNet │
- │Net-B0    │ │DINOv2    │ │ Tiny     │ │     B0       │
- └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
-      │            │            │              │
-      │ Forma      │ Texture    │ Vene /       │ Forma
-      │ del palmo  │ completa   │ caratteristiche│ globale
-      │ + filtro   │ del palmo  │ visive       │ del dorso
-      │ gaussiano  │            │              │
-      │            │            │              │
-      │       ┌────▼─────┐      │              │
-      │       │ MLP      │      │              │
-      │       │Feature   │      │              │
-      │       │Selection │      │              │
-      │       └────┬─────┘      │              │
-      │            │            │              │
-      ▼            ▼            ▼              ▼
-
- ┌──────────────┐          ┌──────────────────────┐
- │MobileNetV3   │          │   MobileNetV3-Large  │
- │Large         │          │                      │
- │ROI centrale  │          │ ROI delle nocche     │
- │del palmo     │          │ estratte con         │
- └──────┬───────┘          │ MediaPipe            │
-        │                  └──────────┬───────────┘
-        │                             │
-        ▼                             ▼
-┌───────────────────┐       ┌───────────────────┐
-│ FUSIONE FEATURES  │       │ FUSIONE FEATURES  │
-│      PALMO        │       │      DORSO        │
-└─────────┬─────────┘       └─────────┬─────────┘
-          │                           │
-          └─────────────┬─────────────┘
-                        ▼
-          ┌───────────────────────────┐
-          │    FUSIONE MULTIMODALE    │
-          │                           │
-          │  Features Palmo + Dorsale │
-          └─────────────┬─────────────┘
-                        │
-                        ▼
-          ┌───────────────────────────┐
-          │   HAND BIOMETRIC TEMPLATE │
-          │                           │
-          │ Identificatore biometrico │
-          │       della mano          │
-          └─────────────┬─────────────┘
-                        │
-                        ▼
-          ┌───────────────────────────┐
-          │ RICONOSCIMENTO IDENTITÀ   │
-          └───────────────────────────┘
 NOTE DE MARSICO:
 Mi pare tutto molto appropriato, salvo il problema dell'eventuale taglia del dataset. Ma in quel caso si può pensare a un nested K-fold validation, anche se richiede un bel pò di tempo ...
 
@@ -135,18 +52,20 @@ RIVEDERE:
 - Aggiungere data augmentation dinamica durante la fase di training usando le immagini allineate 
 
 
-DEcidere se:
-    - Fare addestramento reale solo sull'80% dei soggetti e tenere il 20% per il test o usare il nested k-fold
-    - Applicare il Nested K-Fold
-               E' necessario fare dei cicli esterni e interni è diventa computazionalmente pesante
-               
           
-Comandi esecuzione: 20 EPOCHE SONO TROPPE ABBASSARLE A 15 
-py palm_run.py train --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --epochs 50
-py palm_run.py nested_cv --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 3 --inner_epochs 20 --outer_epochs 50 --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
-pc: py palm_run.py nested_cv --data_dir D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 3 --inner_epochs 20 --outer_epochs 50 --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
+Comandi esecuzione: 
 
-python dorsal_run.py nested_cv --data_dir C:\Users\Admin\Desktop\Tesi\dataset_preprocessed --outer_folds 5 --inner_folds 4 --inner_epochs 20 --outer_epochs 40 --batch_size 32 --lr_grid 0.0001,0.0003 --freeze_swin_grid true --freeze_mobilenet_grid false,true --verbose_inner
+DA ESEGUIRE:
+python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
+
+PRIMA DI FARE DORSAL BISOGNA OTTIMIZZARLO SENNO' CI VORRANNO 26 GIORNI
+python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 5 --batch_size 8 --inner_folds 2 --inner_epochs 25 --outer_epochs 30 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 0
+
+----------------------------------------
+eseguito: 
+python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --batch_size 16
+python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --batch_size 16
+
 
 !!! DATASET COMPLETAMENTE PRE-PROCESSATO !!!
 

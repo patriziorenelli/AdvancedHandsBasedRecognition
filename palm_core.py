@@ -164,11 +164,17 @@ class TextureBranch(nn.Module):
         return self
 
     def forward(self, x):
-        ctx = torch.no_grad() if self.freeze_backbone else torch.enable_grad()
-        with ctx:
-            feats = self.backbone(x)
-        if self.freeze_backbone:
-            feats = feats.detach()
+        # Se x ha gia' 2 dimensioni (B, feat_dim) e' una embedding ViT
+        # PRE-CALCOLATA (vedi precompute_vit_embeddings.py): saltiamo il
+        # forward del backbone, che su CPU e' la parte piu' costosa.
+        if x.dim() == 2:
+            feats = x
+        else:
+            ctx = torch.no_grad() if self.freeze_backbone else torch.enable_grad()
+            with ctx:
+                feats = self.backbone(x)
+            if self.freeze_backbone:
+                feats = feats.detach()
         return self.mlp(feats)
 
 
@@ -285,11 +291,17 @@ def rgb_transform(train: bool) -> T.Compose:
 class PalmBiometricDataset(Dataset):
     """Legge direttamente la struttura di output di preProcessing.py (solo campioni palmari)."""
 
-    def __init__(self, data_dir, subject_ids=None, train: bool = True, frit_cache: bool = True):
+    def __init__(self, data_dir, subject_ids=None, train: bool = True, frit_cache: bool = True,
+                 vit_embed_cache: dict | None = None):
         self.data_dir = Path(data_dir)
         self.frit_cache = frit_cache
         self._frit_mem_cache = {}
         self.rgb_tf = rgb_transform(train)
+        # Dict {percorso_assoluto_palm_hand: np.ndarray(feat_dim,)} prodotto da
+        # precompute_vit_embeddings.py. Se presente, evitiamo di leggere/
+        # trasformare l'immagine palm_hand e restituiamo direttamente la
+        # embedding ViT gia' calcolata (il backbone e' sempre congelato).
+        self.vit_embed_cache = vit_embed_cache
 
         all_subject_dirs = sorted(d for d in self.data_dir.iterdir() if d.is_dir())
         if subject_ids is not None:
@@ -356,8 +368,19 @@ class PalmBiometricDataset(Dataset):
             knuckle_feats[i] = self._load_knuckle_frit(kp)
             knuckle_mask[i] = 1.0
 
+        if self.vit_embed_cache is not None:
+            key = str(s["hand_path"].resolve())
+            if key not in self.vit_embed_cache:
+                raise KeyError(
+                    f"Nessuna embedding ViT precalcolata per {key}. "
+                    f"Rilancia precompute_vit_embeddings.py sull'intero data_dir."
+                )
+            palm_hand_val = torch.from_numpy(self.vit_embed_cache[key]).float()
+        else:
+            palm_hand_val = self._load_rgb(s["hand_path"])
+
         return {
-            "palm_hand": self._load_rgb(s["hand_path"]),
+            "palm_hand": palm_hand_val,
             "palm_roi": self._load_rgb(s["roi_path"]),
             "knuckles": torch.from_numpy(knuckle_feats),
             "knuckle_mask": torch.from_numpy(knuckle_mask),

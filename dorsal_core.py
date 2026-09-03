@@ -1,33 +1,26 @@
 """
 ============================================================
-DORSAL_RUN - Training + Nested K-Fold + Inferenza
+DORSAL_CORE - Config + Vein Enhancement + Modelli + Dataset + Loss/Metriche
 ============================================================
+Pipeline di embedding biometrico per lo stream DORSO, coerente
+con l'output di preProcessing.py:
 
-Comandi principali:
+  <output_dir>/<subject_id>/<subject>_<side>_<seq>_dorsal_hand.png      -> Swin-Tiny (frozen) + MLP
+  <output_dir>/<subject_id>/<subject>_<side>_<seq>_dorsal_<knuckle>.png -> MobileNetV3-Large (ROI nocche)
+  <output_dir>/<subject_id>/<subject>_<side>_<seq>_metadata.json        -> is_dorsal = True
 
-# Training semplice (split train/validation per soggetto)
-python dorsal_run.py train --data_dir dataset_preprocessed --epochs 60
-
-# Nested K-Fold:
-# Outer K-Fold = valutazione finale
-# Inner K-Fold = selezione iperparametri
-python dorsal_run.py nested_cv --data_dir dataset_preprocessed \
-    --outer_folds 5 --inner_folds 4 \
-    --inner_epochs 25 --outer_epochs 60 \
-    --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
-
-# Verifica 1:1
-python dorsal_run.py verify --checkpoint models_final_dorsal/dorsal_embedding_best.pt \
-    --base1 dataset_preprocessed/0001/0001_dorsal_001 \
-    --base2 dataset_preprocessed/0001/0001_dorsal_002
+Contenuto:
+  1. CONFIG
+  2. VEIN ENHANCEMENT (CLAHE forte + Frangi vesselness, handcrafted, no pesi appresi)
+  3. MODELLI: DorsalTextureBranch (Swin-Tiny) / KnuckleMobileNetBranch (MobileNetV3-Large,
+     attention-pooling multi-nocca) + DorsalEmbeddingNet (fusione) + ArcMarginHead (solo training)
+  4. DATASET: legge direttamente l'output di preProcessing.py (solo campioni dorsali)
+  5. LOSS / METRICHE: ArcFace+CE, triplet opzionale, EER open-set
 ============================================================
 """
 
 from __future__ import annotations
-import argparse
-import itertools
 import json
-import time
 from pathlib import Path
 
 import cv2
@@ -35,815 +28,453 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-
-from dorsal_core import (
-    cfg, dorsal_hand_transform, knuckle_transform,
-    DorsalEmbeddingNet, ArcMarginHead,
-    DorsalBiometricDataset, split_subjects, compute_eer,
-    list_subjects, kfold_subject_splits,
-)
+import torchvision.transforms as T
+from torch.utils.data import Dataset
+from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
+from skimage.filters import frangi
+import timm
 
 
 # ============================================================
-# UTILITA'
+# 1) CONFIG
 # ============================================================
-def set_seed(seed: int):
-    import random
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    if torch.cuda.is_available():
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+class Config:
+    DATA_DIR = Path("./dataset_preprocessed")     # output di preProcessing.py
+    CHECKPOINT_DIR = Path("./checkpoints_dorsal")
+    FINAL_MODEL_DIR = Path("./models_final_dorsal")
+
+    SWIN_SIZE = (224, 224)
+    DORSAL_KNUCKLE_SIZE = (224, 224)
+
+    EMBEDDING_DIM = 256
+    TEXTURE_EMBED_DIM = 128     # Swin-Tiny (forma + vene)
+    KNUCKLE_EMBED_DIM = 128     # MobileNetV3-Large (ROI nocche)
+
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    BATCH_SIZE = 32
+    NUM_WORKERS = 4
+    EPOCHS = 60
+    LR = 3e-4
+    WEIGHT_DECAY = 1e-4
+    ARC_MARGIN = 0.30
+    ARC_SCALE = 30.0
+    CHECKPOINT_EVERY_EPOCHS = 5
+    VAL_SPLIT = 0.15           # usato solo dal training semplice
+    SEED = 42
+
+    # Nested K-Fold (sempre PER SOGGETTO, mai per singolo campione)
+    OUTER_FOLDS = 5
+    INNER_FOLDS = 4
+    INNER_EPOCHS = 25
+    OUTER_EPOCHS = 60
+
+    VERIFICATION_THRESHOLD = 0.55   # da ricalibrare via EER sul proprio dataset
+
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]
+    IMAGENET_STD = [0.229, 0.224, 0.225]
+
+    def __init__(self):
+        for d in [self.CHECKPOINT_DIR, self.FINAL_MODEL_DIR]:
+            d.mkdir(parents=True, exist_ok=True)
 
 
-def parse_bool(value: str) -> bool:
-    value = str(value).strip().lower()
-    if value in {"1", "true", "yes", "y"}:
-        return True
-    if value in {"0", "false", "no", "n"}:
-        return False
-    raise argparse.ArgumentTypeError(f"Booleano non valido: {value}")
+cfg = Config()
 
 
-def parse_float_grid(value: str):
-    vals = [float(x.strip()) for x in value.split(",") if x.strip()]
-    if not vals:
-        raise argparse.ArgumentTypeError("La griglia non puo' essere vuota")
-    return vals
+# ============================================================
+# 2) VEIN ENHANCEMENT (handcrafted, no pesi appresi)
+# ============================================================
+# preProcessing.py applica gia' una CLAHE mite (illuminazione) su
+# palm_hand/dorsal_hand in modo identico per i due stream, per
+# rendere il preprocessing agnostico rispetto al backbone a valle.
+# Qui, SOLO per lo stream dorso (branch forma+vene), aggiungiamo
+# un potenziamento mirato a far risaltare i vasi sanguigni
+# sottocutanei visibili sul dorso della mano:
+#   1) CLAHE aggressiva sul canale L (Lab) per aumentare il
+#      contrasto locale della pelle;
+#   2) filtro di Frangi (vesselness/ridge detector multiscala,
+#      handcrafted, lo stesso principio usato in angiografia)
+#      applicato al canale verde (il piu' sensibile al contrasto
+#      vena/pelle in immagini RGB);
+#   3) blending della mappa di vesselness con l'immagine originale
+#      per esaltare le vene senza distruggere la forma della mano
+#      (fondamentale perche' lo stesso branch impara anche la forma).
+def enhance_veins(img_rgb: np.ndarray, clahe_clip: float = 3.0,
+                   vessel_scales=(1, 2, 3, 4), vessel_weight: float = 0.55) -> np.ndarray:
+    """img_rgb: uint8 HxWx3 RGB. Ritorna uint8 HxWx3 RGB con vene esaltate."""
+    lab = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2LAB)
+    L, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8, 8))
+    L_eq = clahe.apply(L)
+    lab_eq = cv2.merge([L_eq, a, b])
+    contrast_rgb = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2RGB)
 
+    # Canale verde: massimo assorbimento dell'emoglobina -> massimo
+    # contrasto vena/pelle nello spettro visibile RGB.
+    green = contrast_rgb[:, :, 1].astype(np.float64) / 255.0
 
-def parse_bool_grid(value: str):
-    vals = [parse_bool(x) for x in value.split(",") if x.strip()]
-    if not vals:
-        raise argparse.ArgumentTypeError("La griglia non puo' essere vuota")
-    return vals
+    # Le vene sono strutture scure e sottili rispetto alla pelle
+    # circostante -> invertiamo il canale cosi' che Frangi (pensato
+    # per strutture chiare tipo vasi in angiografia) le rilevi come ridge.
+    vesselness = frangi(1.0 - green, sigmas=vessel_scales, black_ridges=False)
+    if vesselness.max() > 1e-8:
+        vesselness = vesselness / vesselness.max()
+    vesselness_u8 = (vesselness * 255).astype(np.uint8)
+    vesselness_rgb = cv2.cvtColor(vesselness_u8, cv2.COLOR_GRAY2RGB)
 
-
-def make_loader(dataset, batch_size, shuffle=False, drop_last=False):
-    # drop_last solo se ci sono almeno batch_size campioni.
-    effective_drop_last = drop_last and len(dataset) >= batch_size
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=cfg.NUM_WORKERS,
-        drop_last=effective_drop_last,
-        pin_memory=torch.cuda.is_available(),
+    enhanced = cv2.addWeighted(
+        contrast_rgb, 1.0 - vessel_weight * 0.5,
+        vesselness_rgb, vessel_weight * 0.5, 0,
     )
-
-
-def save_checkpoint(path, epoch, model, head, optimizer, scheduler,
-                    best_eer, n_knuckles, subject_to_label, extra=None):
-    payload = {
-        "epoch": epoch,
-        "model_state": model.state_dict(),
-        "head_state": head.state_dict(),
-        "optimizer_state": optimizer.state_dict() if optimizer else None,
-        "scheduler_state": scheduler.state_dict() if scheduler else None,
-        "best_eer": best_eer,
-        "n_knuckles": n_knuckles,
-        "subject_to_label": subject_to_label,
-        "embedding_dim": cfg.EMBEDDING_DIM,
-    }
-    if extra:
-        payload.update(extra)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    torch.save(payload, path)
-
-
-def load_checkpoint(path, model, head, optimizer=None, scheduler=None):
-    ckpt = torch.load(path, map_location=cfg.DEVICE)
-    model.load_state_dict(ckpt["model_state"])
-    head.load_state_dict(ckpt["head_state"])
-    if optimizer is not None and ckpt.get("optimizer_state"):
-        optimizer.load_state_dict(ckpt["optimizer_state"])
-    if scheduler is not None and ckpt.get("scheduler_state"):
-        scheduler.load_state_dict(ckpt["scheduler_state"])
-    return ckpt
+    return np.clip(enhanced, 0, 255).astype(np.uint8)
 
 
 # ============================================================
-# TRAIN / EVALUATE
+# 3) MODELLI
 # ============================================================
-def train_one_epoch(model, head, loader, optimizer, criterion, device, epoch, log_every=20):
-    model.train()
-    head.train()
+class DorsalTextureBranch(nn.Module):
+    """Swin-Tiny: transformer CONGELATO + MLP addestrabile, su input con vene esaltate."""
 
-    total_loss, total_correct, total_n = 0.0, 0, 0
-    t0 = time.time()
+    def __init__(self, out_dim: int = cfg.TEXTURE_EMBED_DIM, freeze_backbone: bool = True):
+        super().__init__()
+        self.backbone = timm.create_model(
+            "swin_tiny_patch4_window7_224", pretrained=True, num_classes=0,
+        )
+        feat_dim = self.backbone.num_features
+        self.freeze_backbone = freeze_backbone
+        if freeze_backbone:
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+            self.backbone.eval()
 
-    for step, batch in enumerate(loader):
-        dorsal_hand = batch["dorsal_hand"].to(device, non_blocking=True)
-        knuckles = batch["knuckles"].to(device, non_blocking=True)
-        knuckle_mask = batch["knuckle_mask"].to(device, non_blocking=True)
-        labels = batch["label"].to(device, non_blocking=True)
+        self.mlp = nn.Sequential(
+            nn.Linear(feat_dim, 512), nn.GELU(), nn.Dropout(0.2), nn.Linear(512, out_dim)
+        )
 
-        optimizer.zero_grad(set_to_none=True)
-        emb = model(dorsal_hand, knuckles, knuckle_mask)
-        logits = head(emb, labels)
-        loss = criterion(logits, labels)
-        loss.backward()
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self.freeze_backbone:
+            self.backbone.eval()   # niente drift delle running stats interne
+        return self
 
-        trainable = [p for p in model.parameters() if p.requires_grad] + list(head.parameters())
-        torch.nn.utils.clip_grad_norm_(trainable, 5.0)
-        optimizer.step()
+    def forward(self, x):
+        # Se x ha gia' 2 dimensioni (B, feat_dim) e' una embedding Swin
+        # PRE-CALCOLATA (vedi precompute_swin_embeddings.py): saltiamo
+        # backbone + enhance_veins (Frangi), che su CPU sono la parte
+        # piu' costosa di questo branch.
+        if x.dim() == 2:
+            feats = x
+        else:
+            ctx = torch.no_grad() if self.freeze_backbone else torch.enable_grad()
+            with ctx:
+                feats = self.backbone(x)
+            if self.freeze_backbone:
+                feats = feats.detach()
+        return self.mlp(feats)
 
-        total_loss += loss.item() * labels.size(0)
-        total_correct += (logits.argmax(1) == labels).sum().item()
-        total_n += labels.size(0)
 
-        if step % log_every == 0:
-            print(
-                f"  [epoch {epoch}] step {step}/{len(loader)} "
-                f"loss={loss.item():.4f} acc={total_correct/max(1,total_n):.4f}"
-            )
+class _KnuckleMobileNet(nn.Module):
+    """MobileNetV3-Large condiviso, applicato a ciascun ritaglio di nocca (RGB)."""
 
-    return (
-        total_loss / max(1, total_n),
-        total_correct / max(1, total_n),
-        time.time() - t0,
-    )
+    def __init__(self, feat_dim: int = 128, pretrained: bool = True, freeze_backbone: bool = False):
+        super().__init__()
+        net = mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.DEFAULT if pretrained else None)
+        self.features = net.features
+        self.avgpool = net.avgpool
+        in_feat = net.classifier[0].in_features
+        if freeze_backbone:
+            for p in self.features.parameters():
+                p.requires_grad = False
+        self.proj = nn.Sequential(
+            nn.Linear(in_feat, 256), nn.Hardswish(), nn.Dropout(0.2), nn.Linear(256, feat_dim)
+        )
+
+    def forward(self, x):
+        f = self.avgpool(self.features(x)).flatten(1)
+        return self.proj(f)
+
+
+class KnuckleMobileNetBranch(nn.Module):
+    """N nocche dorsali (crop MediaPipe, RGB) -> MobileNetV3-Large condiviso -> attention-pooling."""
+
+    def __init__(self, n_knuckles: int, out_dim: int = cfg.KNUCKLE_EMBED_DIM,
+                 pretrained: bool = True, freeze_backbone: bool = False):
+        super().__init__()
+        self.n_knuckles = n_knuckles
+        self.cnn = _KnuckleMobileNet(feat_dim=128, pretrained=pretrained, freeze_backbone=freeze_backbone)
+        self.attn = nn.Sequential(nn.Linear(128, 64), nn.Tanh(), nn.Linear(64, 1))
+        self.out_proj = nn.Linear(128, out_dim)
+
+    def forward(self, x, mask=None):
+        b, n, c, h, w = x.shape
+        feats = self.cnn(x.view(b * n, c, h, w)).view(b, n, -1)
+        scores = self.attn(feats).squeeze(-1)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, float("-inf"))
+        weights = torch.softmax(scores, dim=1).unsqueeze(-1)
+        return self.out_proj((feats * weights).sum(dim=1))
+
+
+class DorsalEmbeddingNet(nn.Module):
+    """Fusione dei 2 branch (forma+vene / nocche) -> embedding biometrico L2-normalizzato."""
+
+    def __init__(self, n_knuckles: int, embedding_dim: int = cfg.EMBEDDING_DIM,
+                 freeze_swin: bool = True, freeze_mobilenet: bool = False):
+        super().__init__()
+        self.texture_branch = DorsalTextureBranch(cfg.TEXTURE_EMBED_DIM, freeze_swin)
+        self.knuckle_branch = KnuckleMobileNetBranch(n_knuckles, cfg.KNUCKLE_EMBED_DIM,
+                                                       freeze_backbone=freeze_mobilenet)
+
+        fusion_in = cfg.TEXTURE_EMBED_DIM + cfg.KNUCKLE_EMBED_DIM
+        self.fusion = nn.Sequential(
+            nn.Linear(fusion_in, 512), nn.BatchNorm1d(512), nn.ReLU(inplace=True),
+            nn.Dropout(0.3), nn.Linear(512, embedding_dim),
+        )
+
+    def forward(self, dorsal_hand, knuckles, knuckle_mask=None):
+        t = self.texture_branch(dorsal_hand)
+        k = self.knuckle_branch(knuckles, mask=knuckle_mask)
+        emb = self.fusion(torch.cat([t, k], dim=1))
+        return F.normalize(emb, p=2, dim=1)
+
+
+class ArcMarginHead(nn.Module):
+    """Testa ArcFace (solo training): margine angolare additivo per un embedding discriminativo."""
+
+    def __init__(self, embedding_dim: int, n_classes: int, scale: float = cfg.ARC_SCALE, margin: float = cfg.ARC_MARGIN):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(n_classes, embedding_dim) * 0.01)
+        self.scale, self.margin = scale, margin
+
+    def forward(self, embeddings, labels):
+        w = F.normalize(self.weight, p=2, dim=1)
+        cos_theta = F.linear(embeddings, w).clamp(-1 + 1e-7, 1 - 1e-7)
+        target_logit = torch.cos(torch.acos(cos_theta) + self.margin)
+        one_hot = torch.zeros_like(cos_theta).scatter_(1, labels.view(-1, 1), 1.0)
+        return (one_hot * target_logit + (1.0 - one_hot) * cos_theta) * self.scale
+
+
+# ============================================================
+# 4) DATASET
+# ============================================================
+class _EnhanceVeinsTransform:
+    """Wrapper picklabile per enhance_veins, necessario perche' su Windows
+    il DataLoader con num_workers>0 usa multiprocessing 'spawn', che richiede
+    che tutti gli oggetti passati ai worker (incluse le trasformazioni) siano
+    pickle-abili. Una lambda o una funzione locale/nested non lo sono."""
+
+    def __call__(self, img):
+        return enhance_veins(img)
+
+
+def dorsal_hand_transform(train: bool) -> T.Compose:
+    """Trasformazione per l'immagine mano-intera: applica il potenziamento vene
+    PRIMA della normalizzazione ImageNet, cosi' il branch Swin vede sia la
+    forma sia i vasi sanguigni esaltati."""
+    steps = [_EnhanceVeinsTransform(), T.ToPILImage()]
+    if train:
+        # NB: nessun flip qui, preProcessing.py canonicalizza gia' L/R.
+        steps += [T.ColorJitter(brightness=0.1, contrast=0.1),
+                  T.RandomApply([T.GaussianBlur(3)], p=0.1)]
+    steps += [T.ToTensor(), T.Normalize(mean=cfg.IMAGENET_MEAN, std=cfg.IMAGENET_STD)]
+    return T.Compose(steps)
+
+
+def knuckle_transform(train: bool) -> T.Compose:
+    """Trasformazione per i ritagli di nocca (input diretto a MobileNetV3, RGB standard)."""
+    steps = [T.ToPILImage()]
+    if train:
+        steps += [T.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1),
+                  T.RandomApply([T.GaussianBlur(3)], p=0.1)]
+    steps += [T.ToTensor(), T.Normalize(mean=cfg.IMAGENET_MEAN, std=cfg.IMAGENET_STD)]
+    return T.Compose(steps)
+
+
+class DorsalBiometricDataset(Dataset):
+    """Legge direttamente la struttura di output di preProcessing.py (solo campioni dorsali)."""
+
+    def __init__(self, data_dir, subject_ids=None, train: bool = True,
+                 swin_embed_cache: dict | None = None):
+        self.data_dir = Path(data_dir)
+        self.hand_tf = dorsal_hand_transform(train)
+        self.knuckle_tf = knuckle_transform(train)
+        # Dict {percorso_assoluto_dorsal_hand: np.ndarray(feat_dim,)} prodotto
+        # da precompute_swin_embeddings.py. Se presente, saltiamo sia
+        # enhance_veins() (Frangi) sia il forward dello Swin (il backbone
+        # e' sempre congelato) e restituiamo direttamente l'embedding.
+        self.swin_embed_cache = swin_embed_cache
+
+        all_subject_dirs = sorted(d for d in self.data_dir.iterdir() if d.is_dir())
+        if subject_ids is not None:
+            allowed = set(subject_ids)
+            all_subject_dirs = [d for d in all_subject_dirs if d.name in allowed]
+
+        self.subject_to_label = {d.name: i for i, d in enumerate(all_subject_dirs)}
+        self.samples = []
+
+        for sdir in all_subject_dirs:
+            for meta_path in sorted(sdir.glob("*_metadata.json")):
+                meta = json.load(open(meta_path, "r", encoding="utf-8"))
+                if not meta.get("is_dorsal", False):
+                    continue
+                base = meta_path.name.replace("_metadata.json", "")
+                hand_path = sdir / f"{base}_dorsal_hand.png"
+                if not hand_path.exists():
+                    continue
+                knuckle_paths = sorted(sdir.glob(f"{base}_dorsal_*.png"))
+                knuckle_paths = [p for p in knuckle_paths if p.name != hand_path.name]
+                if not knuckle_paths:
+                    continue
+                self.samples.append({"subject": sdir.name, "hand_path": hand_path,
+                                      "knuckle_paths": knuckle_paths})
+
+        self.n_knuckles_max = max((len(s["knuckle_paths"]) for s in self.samples), default=12)
+
+    def __len__(self):
+        return len(self.samples)
+
+    @property
+    def num_classes(self):
+        return len(self.subject_to_label)
+
+    def _load_rgb(self, path, tf):
+        img = cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2RGB)
+        return tf(img)
+
+    def __getitem__(self, idx):
+        s = self.samples[idx]
+        c, h, w = 3, *cfg.DORSAL_KNUCKLE_SIZE
+        knuckle_feats = torch.zeros((self.n_knuckles_max, c, h, w), dtype=torch.float32)
+        knuckle_mask = np.zeros((self.n_knuckles_max,), dtype=np.float32)
+        for i, kp in enumerate(s["knuckle_paths"][: self.n_knuckles_max]):
+            knuckle_feats[i] = self._load_rgb(kp, self.knuckle_tf)
+            knuckle_mask[i] = 1.0
+
+        if self.swin_embed_cache is not None:
+            key = str(s["hand_path"].resolve())
+            if key not in self.swin_embed_cache:
+                raise KeyError(
+                    f"Nessuna embedding Swin precalcolata per {key}. "
+                    f"Rilancia precompute_swin_embeddings.py sull'intero data_dir."
+                )
+            dorsal_hand_val = torch.from_numpy(self.swin_embed_cache[key]).float()
+        else:
+            dorsal_hand_val = self._load_rgb(s["hand_path"], self.hand_tf)
+
+        return {
+            "dorsal_hand": dorsal_hand_val,
+            "knuckles": knuckle_feats,
+            "knuckle_mask": torch.from_numpy(knuckle_mask),
+            "label": torch.tensor(self.subject_to_label[s["subject"]], dtype=torch.long),
+            "subject_id": s["subject"],
+        }
+
+
+def list_subjects(data_dir):
+    """Ritorna gli ID soggetto ordinati presenti nel dataset."""
+    return sorted(d.name for d in Path(data_dir).iterdir() if d.is_dir())
+
+
+def kfold_subject_splits(subject_ids, n_splits: int, seed: int = cfg.SEED):
+    """
+    K-Fold deterministico PER SOGGETTO.
+
+    Ogni split restituisce:
+        (fold_index, train_subjects, test_subjects)
+
+    Non viene mai spezzata l'identita' tra train e test, evitando leakage
+    biometrico tra acquisizioni dello stesso soggetto.
+    """
+    subjects = list(subject_ids)
+    if n_splits < 2:
+        raise ValueError("n_splits deve essere >= 2")
+    if len(subjects) < n_splits:
+        raise ValueError(
+            f"Servono almeno {n_splits} soggetti per il K-Fold, trovati {len(subjects)}"
+        )
+
+    rng = np.random.RandomState(seed)
+    subjects = np.array(sorted(subjects), dtype=object)
+    rng.shuffle(subjects)
+
+    fold_sizes = np.full(n_splits, len(subjects) // n_splits, dtype=int)
+    fold_sizes[: len(subjects) % n_splits] += 1
+
+    current = 0
+    for fold_idx, fold_size in enumerate(fold_sizes, start=1):
+        test_subjects = subjects[current: current + fold_size].tolist()
+        train_subjects = np.concatenate(
+            [subjects[:current], subjects[current + fold_size:]]
+        ).tolist()
+        current += fold_size
+        yield fold_idx, train_subjects, test_subjects
+
+
+def split_subjects(data_dir, val_split: float = cfg.VAL_SPLIT, seed: int = cfg.SEED):
+    """
+    Split semplice PER SOGGETTO.
+
+    Mantiene la compatibilita' con il comando train classico.
+    Per una valutazione scientificamente corretta usare nested_cv.
+    """
+    rng = np.random.RandomState(seed)
+    subjects = list_subjects(data_dir)
+    rng.shuffle(subjects)
+    n_val = max(1, int(len(subjects) * val_split))
+    return subjects[n_val:], subjects[:n_val]   # train, val
+
+
+# ============================================================
+# 5) LOSS / METRICHE DI VERIFICA BIOMETRICA
+# ============================================================
+def triplet_loss(anchor, positive, negative, margin: float = 0.3):
+    d_pos = 1 - F.cosine_similarity(anchor, positive)
+    d_neg = 1 - F.cosine_similarity(anchor, negative)
+    return F.relu(d_pos - d_neg + margin).mean()
 
 
 @torch.no_grad()
-def evaluate_open_set(model, loader, device):
-    model.eval()
-    all_emb, all_subj = [], []
+def build_verification_pairs(labels, max_pairs: int = 20000, seed: int = 42):
+    rng = np.random.RandomState(seed)
+    by_subject = {}
+    for i, lab in enumerate(labels):
+        by_subject.setdefault(lab, []).append(i)
 
-    for batch in loader:
-        emb = model(
-            batch["dorsal_hand"].to(device, non_blocking=True),
-            batch["knuckles"].to(device, non_blocking=True),
-            batch["knuckle_mask"].to(device, non_blocking=True),
-        )
-        all_emb.append(emb.cpu())
-        all_subj.extend(batch["subject_id"])
+    pos_pairs = []
+    for idxs in by_subject.values():
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                pos_pairs.append((idxs[a], idxs[b]))
+    rng.shuffle(pos_pairs)
+    pos_pairs = pos_pairs[: max_pairs // 2]
 
-    if not all_emb:
+    subjects = list(by_subject.keys())
+    if len(subjects) < 2:
+        return pos_pairs, []   # impossibile formare coppie impostor
+
+    neg_pairs, attempts = [], 0
+    while len(neg_pairs) < len(pos_pairs) and attempts < max_pairs * 20:
+        s1, s2 = rng.choice(subjects, 2, replace=False)
+        neg_pairs.append((rng.choice(by_subject[s1]), rng.choice(by_subject[s2])))
+        attempts += 1
+    return pos_pairs, neg_pairs
+
+
+@torch.no_grad()
+def compute_eer(embeddings: torch.Tensor, subject_ids: list[str]):
+    """EER su verifica a coppie, tipicamente su soggetti MAI visti in training (open-set)."""
+    pos_pairs, neg_pairs = build_verification_pairs(subject_ids)
+    if not pos_pairs or not neg_pairs:
         return None
-    return compute_eer(torch.cat(all_emb, dim=0), all_subj)
 
+    emb = F.normalize(embeddings, dim=1)
+    sims = lambda pairs: (emb[[p[0] for p in pairs]] * emb[[p[1] for p in pairs]]).sum(1).cpu().numpy()
+    genuine, impostor = sims(pos_pairs), sims(neg_pairs)
 
-def build_datasets(data_dir, train_subjects, eval_subjects=None,
-                   n_knuckles_max=None):
-    train_ds = DorsalBiometricDataset(
-        data_dir, subject_ids=train_subjects, train=True
-    )
-    eval_ds = None
-    if eval_subjects is not None:
-        eval_ds = DorsalBiometricDataset(
-            data_dir, subject_ids=eval_subjects, train=False
-        )
+    thresholds = np.linspace(-1, 1, 500)
+    fars = np.array([(impostor >= t).mean() for t in thresholds])
+    frrs = np.array([(genuine < t).mean() for t in thresholds])
+    idx = np.argmin(np.abs(fars - frrs))
 
-    if n_knuckles_max is None:
-        candidates = [train_ds.n_knuckles_max]
-        if eval_ds is not None:
-            candidates.append(eval_ds.n_knuckles_max)
-        n_knuckles_max = max(candidates)
-
-    # Stessa dimensionalita' architetturale per tutti i dataset del fold.
-    train_ds.n_knuckles_max = n_knuckles_max
-    if eval_ds is not None:
-        eval_ds.n_knuckles_max = n_knuckles_max
-
-    return train_ds, eval_ds, n_knuckles_max
-
-
-def train_model(train_subjects, data_dir, epochs, batch_size, lr,
-                freeze_swin, freeze_mobilenet, seed,
-                eval_subjects=None, verbose=True, select_best_on_eval=True):
-    """
-    Addestra un modello su train_subjects.
-
-    Se eval_subjects e' presente, restituisce anche l'EER open-set.
-    Questa funzione e' riutilizzata sia dal training semplice sia
-    dall'inner/outer loop del Nested K-Fold.
-    """
-    set_seed(seed)
-    device = cfg.DEVICE
-
-    train_ds, eval_ds, n_knuckles = build_datasets(
-        data_dir, train_subjects, eval_subjects
-    )
-    if len(train_ds) == 0:
-        raise RuntimeError("Dataset di training vuoto per questo fold")
-
-    train_loader = make_loader(train_ds, batch_size, shuffle=True, drop_last=True)
-    eval_loader = (
-        make_loader(eval_ds, batch_size, shuffle=False)
-        if eval_ds is not None and len(eval_ds) > 0 else None
-    )
-
-    model = DorsalEmbeddingNet(
-        n_knuckles,
-        cfg.EMBEDDING_DIM,
-        freeze_swin=freeze_swin,
-        freeze_mobilenet=freeze_mobilenet,
-    ).to(device)
-
-    head = ArcMarginHead(cfg.EMBEDDING_DIM, train_ds.num_classes).to(device)
-
-    trainable = [p for p in model.parameters() if p.requires_grad] + list(head.parameters())
-    optimizer = torch.optim.AdamW(
-        trainable, lr=lr, weight_decay=cfg.WEIGHT_DECAY
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=max(1, epochs)
-    )
-    criterion = nn.CrossEntropyLoss()
-
-    best_eer = float("inf")
-    best_epoch = 0
-    best_model_state = None
-    best_head_state = None
-
-    for epoch in range(1, epochs + 1):
-        train_loss, train_acc, dt = train_one_epoch(
-            model, head, train_loader, optimizer, criterion, device, epoch
-        )
-        scheduler.step()
-
-        metrics = None
-        if eval_loader is not None and select_best_on_eval:
-            metrics = evaluate_open_set(model, eval_loader, device)
-            if metrics is not None and metrics["eer"] < best_eer:
-                best_eer = metrics["eer"]
-                best_epoch = epoch
-                best_model_state = {
-                    k: v.detach().cpu().clone()
-                    for k, v in model.state_dict().items()
-                }
-                best_head_state = {
-                    k: v.detach().cpu().clone()
-                    for k, v in head.state_dict().items()
-                }
-
-        if verbose:
-            msg = (
-                f"Epoch {epoch}/{epochs} - loss={train_loss:.4f} "
-                f"acc={train_acc:.4f} ({dt:.1f}s) "
-                f"lr={scheduler.get_last_lr()[0]:.2e}"
-            )
-            if metrics:
-                msg += (
-                    f" | eval EER={metrics['eer']*100:.2f}% "
-                    f"@thr={metrics['eer_threshold']:.3f}"
-                )
-            print(msg)
-
-    # Con validation ripristiniamo l'epoca migliore.
-    if best_model_state is not None:
-        model.load_state_dict(best_model_state)
-        head.load_state_dict(best_head_state)
-        final_metrics = evaluate_open_set(model, eval_loader, device)
-    elif eval_loader is not None:
-        # Nel refit outer l'eval set puo' essere l'outer test:
-        # viene valutato UNA SOLA VOLTA qui, senza influenzare checkpoint/epoche.
-        final_metrics = evaluate_open_set(model, eval_loader, device)
-        best_epoch = epochs
-        best_eer = final_metrics["eer"] if final_metrics is not None else None
-    else:
-        final_metrics = None
-        best_epoch = epochs
-        best_eer = None
-
-    return {
-        "model": model,
-        "head": head,
-        "train_ds": train_ds,
-        "n_knuckles": n_knuckles,
-        "metrics": final_metrics,
-        "best_epoch": best_epoch,
-        "best_eer": best_eer,
-    }
-
-
-# ============================================================
-# TRAINING SEMPLICE (compatibilita')
-# ============================================================
-def cmd_train(args):
-    set_seed(cfg.SEED)
-    device = cfg.DEVICE
-    print(f"Device: {device}")
-
-    train_subjects, val_subjects = split_subjects(args.data_dir)
-    print(
-        f"Soggetti train: {len(train_subjects)} | "
-        f"Soggetti validation (open-set): {len(val_subjects)}"
-    )
-
-    result = train_model(
-        train_subjects=train_subjects,
-        data_dir=args.data_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        freeze_swin=args.freeze_swin,
-        freeze_mobilenet=args.freeze_mobilenet,
-        seed=cfg.SEED,
-        eval_subjects=val_subjects,
-        verbose=True,
-    )
-
-    model = result["model"]
-    head = result["head"]
-    train_ds = result["train_ds"]
-    best_eer = result["metrics"]["eer"] if result["metrics"] else float("nan")
-
-    final_path = cfg.FINAL_MODEL_DIR / "dorsal_embedding_final.pt"
-    save_checkpoint(
-        final_path, result["best_epoch"], model, head,
-        optimizer=None, scheduler=None, best_eer=best_eer,
-        n_knuckles=result["n_knuckles"],
-        subject_to_label=train_ds.subject_to_label,
-        extra={"training_mode": "simple_subject_split"},
-    )
-
-    print(f"\nTraining completato. Modello finale: {final_path}")
-    if result["metrics"]:
-        print(
-            f"EER validation open-set: {result['metrics']['eer']*100:.2f}% "
-            f"@thr={result['metrics']['eer_threshold']:.3f}"
-        )
-
-
-# ============================================================
-# NESTED K-FOLD
-# ============================================================
-def make_hyperparameter_grid(args):
-    grid = []
-    for lr, freeze_swin, freeze_mobilenet in itertools.product(
-        args.lr_grid,
-        args.freeze_swin_grid,
-        args.freeze_mobilenet_grid,
-    ):
-        grid.append({
-            "lr": float(lr),
-            "freeze_swin": bool(freeze_swin),
-            "freeze_mobilenet": bool(freeze_mobilenet),
-        })
-    return grid
-
-
-def inner_model_selection(outer_train_subjects, args, outer_fold):
-    """
-    INNER LOOP:
-    - nessun soggetto dell'outer test entra qui;
-    - per ogni combinazione di iperparametri esegue Inner K-Fold;
-    - seleziona la configurazione con EER medio piu' basso.
-    """
-    candidates = make_hyperparameter_grid(args)
-    candidate_results = []
-
-    print(f"\n[OUTER {outer_fold}] INNER MODEL SELECTION")
-    print(
-        f"  Soggetti disponibili per inner CV: {len(outer_train_subjects)} | "
-        f"candidati: {len(candidates)}"
-    )
-
-    for cand_idx, hp in enumerate(candidates, start=1):
-        print(
-            f"\n  Candidato {cand_idx}/{len(candidates)}: "
-            f"lr={hp['lr']} freeze_swin={hp['freeze_swin']} "
-            f"freeze_mobilenet={hp['freeze_mobilenet']}"
-        )
-
-        fold_eers = []
-        fold_epochs = []
-
-        for inner_fold, inner_train, inner_val in kfold_subject_splits(
-            outer_train_subjects,
-            args.inner_folds,
-            seed=cfg.SEED + outer_fold * 1000 + cand_idx,
-        ):
-            print(
-                f"    [Inner {inner_fold}/{args.inner_folds}] "
-                f"train_subjects={len(inner_train)} "
-                f"val_subjects={len(inner_val)}"
-            )
-
-            result = train_model(
-                train_subjects=inner_train,
-                data_dir=args.data_dir,
-                epochs=args.inner_epochs,
-                batch_size=args.batch_size,
-                lr=hp["lr"],
-                freeze_swin=hp["freeze_swin"],
-                freeze_mobilenet=hp["freeze_mobilenet"],
-                seed=cfg.SEED + outer_fold * 10000 + cand_idx * 100 + inner_fold,
-                eval_subjects=inner_val,
-                verbose=args.verbose_inner,
-            )
-
-            metrics = result["metrics"]
-            if metrics is None:
-                raise RuntimeError(
-                    "Impossibile calcolare EER nell'inner fold. "
-                    "Ogni validation fold deve contenere abbastanza campioni per soggetto."
-                )
-
-            fold_eers.append(metrics["eer"])
-            fold_epochs.append(result["best_epoch"])
-
-            print(
-                f"      -> Inner EER={metrics['eer']*100:.2f}% "
-                f"@thr={metrics['eer_threshold']:.3f} "
-                f"(best epoch={result['best_epoch']})"
-            )
-
-            del result
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-        mean_eer = float(np.mean(fold_eers))
-        std_eer = float(np.std(fold_eers))
-        mean_epoch = max(1, int(round(np.mean(fold_epochs))))
-
-        candidate_results.append({
-            **hp,
-            "mean_eer": mean_eer,
-            "std_eer": std_eer,
-            "fold_eers": fold_eers,
-            "selected_epochs": fold_epochs,
-            "mean_best_epoch": mean_epoch,
-        })
-
-        print(
-            f"  ==> Candidato {cand_idx}: mean EER={mean_eer*100:.2f}% "
-            f"+/- {std_eer*100:.2f}% | epoch finale suggerita={mean_epoch}"
-        )
-
-    # Tie-break: prima EER medio, poi deviazione standard.
-    candidate_results.sort(key=lambda x: (x["mean_eer"], x["std_eer"]))
-    best = candidate_results[0]
-
-    print(
-        f"\n  >>> BEST OUTER {outer_fold}: "
-        f"lr={best['lr']} freeze_swin={best['freeze_swin']} "
-        f"freeze_mobilenet={best['freeze_mobilenet']} "
-        f"| inner mean EER={best['mean_eer']*100:.2f}%"
-    )
-
-    return best, candidate_results
-
-
-def cmd_nested_cv(args):
-    """
-    Protocollo Nested K-Fold:
-
-    OUTER:
-        train+validation -----------------> selezione modello nell'INNER
-        test (soggetti mai visti) --------> una sola valutazione finale
-
-    INNER:
-        train/validation per soggetto ----> scelta iperparametri
-
-    IMPORTANTE: l'outer test fold non viene mai usato per scegliere
-    iperparametri, epoche o checkpoint.
-    """
-    set_seed(cfg.SEED)
-    device = cfg.DEVICE
-    all_subjects = list_subjects(args.data_dir)
-
-    if len(all_subjects) < args.outer_folds:
-        raise ValueError(
-            f"Soggetti ({len(all_subjects)}) < outer_folds ({args.outer_folds})"
-        )
-
-    # Dopo aver rimosso l'outer test deve essere ancora possibile fare l'inner CV.
-    min_outer_train = len(all_subjects) - int(np.ceil(len(all_subjects) / args.outer_folds))
-    if min_outer_train < args.inner_folds:
-        raise ValueError(
-            f"Con {len(all_subjects)} soggetti, outer_folds={args.outer_folds} "
-            f"lascia troppo pochi soggetti per inner_folds={args.inner_folds}."
-        )
-
-    output_dir = cfg.FINAL_MODEL_DIR / "nested_cv"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    print("\n" + "=" * 72)
-    print("NESTED K-FOLD - DORSAL BIOMETRIC EMBEDDING")
-    print("=" * 72)
-    print(f"Device: {device}")
-    print(f"Soggetti totali: {len(all_subjects)}")
-    print(f"Outer folds: {args.outer_folds}")
-    print(f"Inner folds: {args.inner_folds}")
-    print(f"Inner epochs: {args.inner_epochs}")
-    print(f"Outer epochs: {args.outer_epochs}")
-    print(f"Output: {output_dir}")
-
-    outer_results = []
-
-    for outer_fold, outer_train, outer_test in kfold_subject_splits(
-        all_subjects, args.outer_folds, seed=cfg.SEED
-    ):
-        print("\n" + "#" * 72)
-        print(
-            f"OUTER FOLD {outer_fold}/{args.outer_folds} | "
-            f"train+inner={len(outer_train)} | final test={len(outer_test)}"
-        )
-        print("#" * 72)
-
-        # 1) INNER CV: selezione iperparametri.
-        best_hp, all_candidates = inner_model_selection(
-            outer_train, args, outer_fold
-        )
-
-        # 2) Refit sul 100% dei soggetti dell'outer training set.
-        #    Il numero di epoche viene dalla media delle best epoch dell'inner CV.
-        final_epochs = (
-            args.outer_epochs if args.outer_epochs is not None
-            else best_hp["mean_best_epoch"]
-        )
-
-        print(
-            f"\n[OUTER {outer_fold}] REFIT finale su {len(outer_train)} soggetti "
-            f"per {final_epochs} epoche"
-        )
-
-        final_result = train_model(
-            train_subjects=outer_train,
-            data_dir=args.data_dir,
-            epochs=final_epochs,
-            batch_size=args.batch_size,
-            lr=best_hp["lr"],
-            freeze_swin=best_hp["freeze_swin"],
-            freeze_mobilenet=best_hp["freeze_mobilenet"],
-            seed=cfg.SEED + outer_fold * 99999,
-            eval_subjects=outer_test,  # SOLO valutazione finale
-            verbose=True,
-            select_best_on_eval=False,   # l'outer test NON influenza il training
-        )
-
-        test_metrics = final_result["metrics"]
-        if test_metrics is None:
-            raise RuntimeError(f"Impossibile calcolare EER sull'outer fold {outer_fold}")
-
-        fold_path = output_dir / f"dorsal_outer_fold_{outer_fold:02d}.pt"
-        save_checkpoint(
-            fold_path,
-            final_result["best_epoch"],
-            final_result["model"],
-            final_result["head"],
-            optimizer=None,
-            scheduler=None,
-            best_eer=test_metrics["eer"],
-            n_knuckles=final_result["n_knuckles"],
-            subject_to_label=final_result["train_ds"].subject_to_label,
-            extra={
-                "training_mode": "nested_kfold_outer",
-                "outer_fold": outer_fold,
-                "outer_folds": args.outer_folds,
-                "inner_folds": args.inner_folds,
-                "selected_hyperparameters": best_hp,
-                "outer_test_subjects": outer_test,
-            },
-        )
-
-        fold_result = {
-            "outer_fold": outer_fold,
-            "n_outer_train_subjects": len(outer_train),
-            "n_outer_test_subjects": len(outer_test),
-            "selected_hyperparameters": best_hp,
-            "all_inner_candidates": all_candidates,
-            "outer_test_metrics": test_metrics,
-            "checkpoint": str(fold_path),
-        }
-        outer_results.append(fold_result)
-
-        print(
-            f"\n[OUTER {outer_fold}] FINAL TEST (mai usato nell'inner CV): "
-            f"EER={test_metrics['eer']*100:.2f}% "
-            f"@thr={test_metrics['eer_threshold']:.3f}"
-        )
-
-        del final_result
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    eers = np.array([x["outer_test_metrics"]["eer"] for x in outer_results])
-    thresholds = np.array(
-        [x["outer_test_metrics"]["eer_threshold"] for x in outer_results]
-    )
-
-    summary = {
-        "protocol": {
-            "name": "Nested K-Fold subject-disjoint",
-            "outer_folds": args.outer_folds,
-            "inner_folds": args.inner_folds,
-            "seed": cfg.SEED,
-            "selection_metric": "open-set EER",
-            "unit_of_split": "subject_id",
-        },
-        "n_subjects": len(all_subjects),
-        "outer_folds": outer_results,
-        "summary": {
-            "mean_outer_eer": float(eers.mean()),
-            "std_outer_eer": float(eers.std()),
-            "min_outer_eer": float(eers.min()),
-            "max_outer_eer": float(eers.max()),
-            "mean_eer_threshold": float(thresholds.mean()),
-        },
-    }
-
-    summary_path = output_dir / "nested_cv_summary.json"
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
-
-    print("\n" + "=" * 72)
-    print("RISULTATO FINALE NESTED K-FOLD")
-    print("=" * 72)
-    print(
-        f"Outer-test EER medio: {eers.mean()*100:.2f}% "
-        f"+/- {eers.std()*100:.2f}%"
-    )
-    print(f"Min EER: {eers.min()*100:.2f}% | Max EER: {eers.max()*100:.2f}%")
-    print(f"Threshold EER medio (solo descrittivo): {thresholds.mean():.3f}")
-    print(f"Summary JSON: {summary_path}")
-
-
-# ============================================================
-# INFERENZA / VERIFICA
-# ============================================================
-class DorsalVerifier:
-    def __init__(self, checkpoint_path, device=None):
-        self.device = device or cfg.DEVICE
-        ckpt = torch.load(checkpoint_path, map_location=self.device)
-        self.n_knuckles = ckpt["n_knuckles"]
-        self.model = DorsalEmbeddingNet(
-            self.n_knuckles,
-            ckpt.get("embedding_dim", cfg.EMBEDDING_DIM),
-            freeze_swin=True,
-        ).to(self.device)
-        self.model.load_state_dict(ckpt["model_state"])
-        self.model.eval()
-        self.hand_tf = dorsal_hand_transform(train=False)
-        self.knuckle_tf = knuckle_transform(train=False)
-        print(
-            f"Modello caricato da {checkpoint_path} "
-            f"(epoch {ckpt['epoch']}, best_eer={ckpt.get('best_eer', float('nan')):.4f})"
-        )
-
-    def _load_sample(self, base_path):
-        base_path = Path(base_path)
-        folder, prefix = base_path.parent, base_path.name
-        hand_path = folder / f"{prefix}_dorsal_hand.png"
-        knuckle_paths = [
-            p for p in sorted(folder.glob(f"{prefix}_dorsal_*.png"))
-            if p.name != hand_path.name
-        ]
-
-        if not hand_path.exists():
-            raise FileNotFoundError(
-                f"File mancante per {base_path} (dorsal_hand)"
-            )
-
-        dorsal_hand = self.hand_tf(
-            cv2.cvtColor(cv2.imread(str(hand_path)), cv2.COLOR_BGR2RGB)
-        ).unsqueeze(0)
-
-        knuckles = torch.zeros(
-            1, self.n_knuckles, 3, *cfg.DORSAL_KNUCKLE_SIZE
-        )
-        mask = torch.zeros(1, self.n_knuckles)
-
-        for i, kp in enumerate(knuckle_paths[:self.n_knuckles]):
-            img = cv2.cvtColor(cv2.imread(str(kp)), cv2.COLOR_BGR2RGB)
-            knuckles[0, i] = self.knuckle_tf(img)
-            mask[0, i] = 1.0
-
-        return (
-            dorsal_hand.to(self.device),
-            knuckles.to(self.device),
-            mask.to(self.device),
-        )
-
-    @torch.no_grad()
-    def embed(self, base_path) -> torch.Tensor:
-        dorsal_hand, knuckles, mask = self._load_sample(base_path)
-        return self.model(
-            dorsal_hand, knuckles, mask
-        ).squeeze(0).cpu()
-
-    @torch.no_grad()
-    def verify(self, base_path1, base_path2,
-               threshold: float = cfg.VERIFICATION_THRESHOLD):
-        emb1 = self.embed(base_path1)
-        emb2 = self.embed(base_path2)
-        similarity = F.cosine_similarity(
-            emb1.unsqueeze(0), emb2.unsqueeze(0)
-        ).item()
-        return {
-            "same_subject": bool(similarity >= threshold),
-            "similarity": similarity,
-            "threshold": threshold,
-        }
-
-    @torch.no_grad()
-    def identify(self, probe_base_path, gallery: dict[str, torch.Tensor],
-                 threshold: float = cfg.VERIFICATION_THRESHOLD):
-        probe_emb = self.embed(probe_base_path)
-        best_subject, best_sim = None, -1.0
-
-        for subject_id, gallery_emb in gallery.items():
-            sim = F.cosine_similarity(
-                probe_emb.unsqueeze(0), gallery_emb.unsqueeze(0)
-            ).item()
-            if sim > best_sim:
-                best_subject, best_sim = subject_id, sim
-
-        if best_sim < threshold:
-            return {"identified_subject": None, "similarity": best_sim}
-        return {"identified_subject": best_subject, "similarity": best_sim}
-
-
-def cmd_verify(args):
-    verifier = DorsalVerifier(args.checkpoint)
-    result = verifier.verify(
-        args.base1, args.base2, threshold=args.threshold
-    )
-    print(json.dumps(result, indent=2))
-    verdict = (
-        "STESSO SOGGETTO"
-        if result["same_subject"] else "SOGGETTI DIVERSI"
-    )
-    print(
-        f"\n>>> {verdict}  (similarity={result['similarity']:.4f}, "
-        f"soglia={result['threshold']:.4f})"
-    )
-
-
-# ============================================================
-# CLI
-# ============================================================
-def main():
-    parser = argparse.ArgumentParser(
-        description="Training + Nested K-Fold + inferenza embedding biometrico dorso"
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    # Training semplice.
-    p_train = sub.add_parser(
-        "train", help="addestra con semplice split train/validation per soggetto"
-    )
-    p_train.add_argument("--data_dir", default=str(cfg.DATA_DIR))
-    p_train.add_argument("--epochs", type=int, default=cfg.EPOCHS)
-    p_train.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE)
-    p_train.add_argument("--lr", type=float, default=cfg.LR)
-    p_train.add_argument("--freeze_swin", type=parse_bool, default=True)
-    p_train.add_argument("--freeze_mobilenet", type=parse_bool, default=False)
-    p_train.set_defaults(func=cmd_train)
-
-    # Nested K-Fold.
-    p_nested = sub.add_parser(
-        "nested_cv",
-        help="Nested K-Fold subject-disjoint: inner tuning + outer final test",
-    )
-    p_nested.add_argument("--data_dir", default=str(cfg.DATA_DIR))
-    p_nested.add_argument("--outer_folds", type=int, default=cfg.OUTER_FOLDS)
-    p_nested.add_argument("--inner_folds", type=int, default=cfg.INNER_FOLDS)
-    p_nested.add_argument("--inner_epochs", type=int, default=cfg.INNER_EPOCHS)
-    p_nested.add_argument(
-        "--outer_epochs", type=int, default=cfg.OUTER_EPOCHS,
-        help="epoche del refit outer dopo la selezione inner",
-    )
-    p_nested.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE)
-    p_nested.add_argument(
-        "--lr_grid", type=parse_float_grid, default=[cfg.LR],
-        help="es. 0.0001,0.0003",
-    )
-    p_nested.add_argument(
-        "--freeze_swin_grid", type=parse_bool_grid, default=[True],
-        help="es. true,false",
-    )
-    p_nested.add_argument(
-        "--freeze_mobilenet_grid", type=parse_bool_grid, default=[False, True],
-        help="es. false,true",
-    )
-    p_nested.add_argument(
-        "--verbose_inner", action="store_true",
-        help="stampa ogni epoca anche durante tutti gli inner fold",
-    )
-    p_nested.set_defaults(func=cmd_nested_cv)
-
-    # Verifica.
-    p_verify = sub.add_parser(
-        "verify", help="verifica 1:1 tra due acquisizioni preprocessate"
-    )
-    p_verify.add_argument("--checkpoint", required=True)
-    p_verify.add_argument("--base1", required=True)
-    p_verify.add_argument("--base2", required=True)
-    p_verify.add_argument(
-        "--threshold", type=float, default=cfg.VERIFICATION_THRESHOLD
-    )
-    p_verify.set_defaults(func=cmd_verify)
-
-    args = parser.parse_args()
-    args.func(args)
-
-
-if __name__ == "__main__":
-    main()
+    return {"eer": float((fars[idx] + frrs[idx]) / 2), "eer_threshold": float(thresholds[idx]),
+            "n_genuine": len(genuine), "n_impostor": len(impostor)}

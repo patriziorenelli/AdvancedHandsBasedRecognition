@@ -188,14 +188,16 @@ def evaluate_open_set(model, loader, device):
 
 
 def build_datasets(data_dir, train_subjects, eval_subjects=None,
-                   n_knuckles_max=None):
+                   n_knuckles_max=None, swin_embed_cache=None):
     train_ds = DorsalBiometricDataset(
-        data_dir, subject_ids=train_subjects, train=True
+        data_dir, subject_ids=train_subjects, train=True,
+        swin_embed_cache=swin_embed_cache,
     )
     eval_ds = None
     if eval_subjects is not None:
         eval_ds = DorsalBiometricDataset(
-            data_dir, subject_ids=eval_subjects, train=False
+            data_dir, subject_ids=eval_subjects, train=False,
+            swin_embed_cache=swin_embed_cache,
         )
 
     if n_knuckles_max is None:
@@ -232,10 +234,25 @@ def init_csv_logger(path):
     return log_row, f
 
 
+def load_swin_embed_cache(path):
+    """
+    Carica il file prodotto da precompute_swin_embeddings.py: un .npz con
+    - 'paths': array di stringhe (percorsi assoluti dei _dorsal_hand.png)
+    - 'embeds': array (N, feat_dim) float32
+    Ritorna un dict {percorso: np.ndarray(feat_dim,)}.
+    """
+    data = np.load(path, allow_pickle=True)
+    paths = data["paths"]
+    embeds = data["embeds"]
+    if len(paths) != len(embeds):
+        raise ValueError("Cache Swin corrotta: paths ed embeds hanno lunghezze diverse")
+    return {str(p): embeds[i] for i, p in enumerate(paths)}
+
+
 def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 freeze_swin, freeze_mobilenet, seed,
                 eval_subjects=None, verbose=True, select_best_on_eval=True,
-                log_csv_path=None):
+                log_csv_path=None, swin_embed_cache=None, early_stopping_patience=0):
     """
     Addestra un modello su train_subjects.
 
@@ -247,7 +264,7 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     device = cfg.DEVICE
 
     train_ds, eval_ds, n_knuckles = build_datasets(
-        data_dir, train_subjects, eval_subjects
+        data_dir, train_subjects, eval_subjects, swin_embed_cache=swin_embed_cache
     )
     if len(train_ds) == 0:
         raise RuntimeError("Dataset di training vuoto per questo fold")
@@ -280,6 +297,7 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     best_epoch = 0
     best_model_state = None
     best_head_state = None
+    epochs_since_improvement = 0
 
     log_row, log_file = (None, None)
     if log_csv_path is not None:
@@ -305,6 +323,9 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                     k: v.detach().cpu().clone()
                     for k, v in head.state_dict().items()
                 }
+                epochs_since_improvement = 0
+            elif metrics is not None:
+                epochs_since_improvement += 1
 
         if verbose:
             msg = (
@@ -328,6 +349,16 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 "lr": scheduler.get_last_lr()[0], "epoch_seconds": round(dt, 2),
                 "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             })
+
+        if (early_stopping_patience > 0 and eval_loader is not None
+                and select_best_on_eval and epochs_since_improvement >= early_stopping_patience):
+            if verbose:
+                print(
+                    f"  [early stopping] nessun miglioramento EER da "
+                    f"{epochs_since_improvement} epoche (best epoch={best_epoch}, "
+                    f"best EER={best_eer*100:.2f}%). Interrompo a epoca {epoch}/{epochs}."
+                )
+            break
 
     if log_file is not None:
         log_file.close()
@@ -427,7 +458,7 @@ def make_hyperparameter_grid(args):
     return grid
 
 
-def inner_model_selection(outer_train_subjects, args, outer_fold):
+def inner_model_selection(outer_train_subjects, args, outer_fold, swin_embed_cache=None):
     """
     INNER LOOP:
     - nessun soggetto dell'outer test entra qui;
@@ -477,6 +508,8 @@ def inner_model_selection(outer_train_subjects, args, outer_fold):
                 verbose=args.verbose_inner,
                 log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" /
                     f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
+                swin_embed_cache=swin_embed_cache,
+                early_stopping_patience=args.early_stopping_patience,
             )
 
             metrics = result["metrics"]
@@ -547,7 +580,22 @@ def cmd_nested_cv(args):
     """
     set_seed(cfg.SEED)
     device = cfg.DEVICE
+
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
     all_subjects = list_subjects(args.data_dir)
+
+    swin_embed_cache = None
+    if args.swin_cache_path:
+        print(f"\nCarico cache embedding Swin da: {args.swin_cache_path}")
+        t0 = time.time()
+        swin_embed_cache = load_swin_embed_cache(args.swin_cache_path)
+        print(
+            f"  -> {len(swin_embed_cache)} embedding caricate in "
+            f"{time.time() - t0:.1f}s (backbone Swin + enhance_veins NON verranno eseguiti)"
+        )
 
     if len(all_subjects) < args.outer_folds:
         raise ValueError(
@@ -590,7 +638,7 @@ def cmd_nested_cv(args):
 
         # 1) INNER CV: selezione iperparametri.
         best_hp, all_candidates = inner_model_selection(
-            outer_train, args, outer_fold
+            outer_train, args, outer_fold, swin_embed_cache=swin_embed_cache
         )
 
         # 2) Refit sul 100% dei soggetti dell'outer training set.
@@ -618,6 +666,7 @@ def cmd_nested_cv(args):
             verbose=True,
             select_best_on_eval=False,   # l'outer test NON influenza il training
             log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" / f"train_log_outer{outer_fold:02d}_refit.csv",
+            swin_embed_cache=swin_embed_cache,
         )
 
         test_metrics = final_result["metrics"]
@@ -868,6 +917,20 @@ def main():
     p_nested.add_argument(
         "--verbose_inner", action="store_true",
         help="stampa ogni epoca anche durante tutti gli inner fold",
+    )
+    p_nested.add_argument(
+        "--swin_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_swin_embeddings.py; "
+             "se impostato, salta enhance_veins()+forward Swin durante il training",
+    )
+    p_nested.add_argument(
+        "--early_stopping_patience", type=int, default=0,
+        help="numero di epoche senza miglioramento EER dopo cui interrompere "
+             "un fold (0 = disabilitato)",
+    )
+    p_nested.add_argument(
+        "--num_workers", type=int, default=None,
+        help="override di cfg.NUM_WORKERS; default: usa il valore in Config",
     )
     p_nested.set_defaults(func=cmd_nested_cv)
 

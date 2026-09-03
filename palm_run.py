@@ -98,6 +98,21 @@ def make_loader(dataset, batch_size, shuffle=False, drop_last=False):
     )
 
 
+def load_vit_embed_cache(path):
+    """
+    Carica il file prodotto da precompute_vit_embeddings.py: un .npz con
+    - 'paths': array di stringhe (percorsi assoluti dei _palm_hand.png)
+    - 'embeds': array (N, feat_dim) float32
+    Ritorna un dict {percorso: np.ndarray(feat_dim,)}.
+    """
+    data = np.load(path, allow_pickle=True)
+    paths = data["paths"]
+    embeds = data["embeds"]
+    if len(paths) != len(embeds):
+        raise ValueError("Cache ViT corrotta: paths ed embeds hanno lunghezze diverse")
+    return {str(p): embeds[i] for i, p in enumerate(paths)}
+
+
 def save_checkpoint(path, epoch, model, head, optimizer, scheduler,
                     best_eer, n_knuckles, subject_to_label, extra=None):
     payload = {
@@ -193,14 +208,16 @@ def evaluate_open_set(model, loader, device):
 
 
 def build_datasets(data_dir, train_subjects, eval_subjects=None,
-                   n_knuckles_max=None):
+                   n_knuckles_max=None, vit_embed_cache=None):
     train_ds = PalmBiometricDataset(
-        data_dir, subject_ids=train_subjects, train=True
+        data_dir, subject_ids=train_subjects, train=True,
+        vit_embed_cache=vit_embed_cache,
     )
     eval_ds = None
     if eval_subjects is not None:
         eval_ds = PalmBiometricDataset(
-            data_dir, subject_ids=eval_subjects, train=False
+            data_dir, subject_ids=eval_subjects, train=False,
+            vit_embed_cache=vit_embed_cache,
         )
 
     if n_knuckles_max is None:
@@ -298,7 +315,8 @@ def default_run_log_path(subdir="logs", prefix="run"):
 def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 freeze_vit, freeze_mobilenet, seed,
                 eval_subjects=None, verbose=True, select_best_on_eval=True,
-                log_csv_path=None, run_logger=None, run_logger_tag=None):
+                log_csv_path=None, run_logger=None, run_logger_tag=None,
+                vit_embed_cache=None, early_stopping_patience=0):
     """
     Addestra un modello su train_subjects.
 
@@ -310,7 +328,7 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     device = cfg.DEVICE
 
     train_ds, eval_ds, n_knuckles = build_datasets(
-        data_dir, train_subjects, eval_subjects
+        data_dir, train_subjects, eval_subjects, vit_embed_cache=vit_embed_cache
     )
     if len(train_ds) == 0:
         raise RuntimeError("Dataset di training vuoto per questo fold")
@@ -363,6 +381,7 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     best_epoch = 0
     best_model_state = None
     best_head_state = None
+    epochs_since_improvement = 0
 
     log_row, log_file = (None, None)
     if log_csv_path is not None:
@@ -375,6 +394,7 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
         scheduler.step()
 
         metrics = None
+        improved = False
         if eval_loader is not None and select_best_on_eval:
             metrics = evaluate_open_set(model, eval_loader, device)
             if metrics is not None and metrics["eer"] < best_eer:
@@ -388,6 +408,10 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                     k: v.detach().cpu().clone()
                     for k, v in head.state_dict().items()
                 }
+                improved = True
+                epochs_since_improvement = 0
+            elif metrics is not None:
+                epochs_since_improvement += 1
 
         if verbose:
             msg = (
@@ -422,6 +446,21 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 is_best_so_far=bool(metrics is not None and metrics["eer"] == best_eer),
                 lr=scheduler.get_last_lr()[0], epoch_seconds=round(dt, 2),
             )
+
+        if (early_stopping_patience > 0 and eval_loader is not None
+                and select_best_on_eval and epochs_since_improvement >= early_stopping_patience):
+            if verbose:
+                print(
+                    f"  [early stopping] nessun miglioramento EER da "
+                    f"{epochs_since_improvement} epoche (best epoch={best_epoch}, "
+                    f"best EER={best_eer*100:.2f}%). Interrompo a epoca {epoch}/{epochs}."
+                )
+            if run_logger is not None:
+                run_logger.log_event(
+                    "early_stopping", tag=run_logger_tag,
+                    stopped_at_epoch=epoch, best_epoch=best_epoch, best_eer=best_eer,
+                )
+            break
 
     if log_file is not None:
         log_file.close()
@@ -549,7 +588,8 @@ def make_hyperparameter_grid(args):
     return grid
 
 
-def inner_model_selection(outer_train_subjects, args, outer_fold, run_logger=None):
+def inner_model_selection(outer_train_subjects, args, outer_fold, run_logger=None,
+                           vit_embed_cache=None):
     """
     INNER LOOP:
     - nessun soggetto dell'outer test entra qui;
@@ -601,6 +641,8 @@ def inner_model_selection(outer_train_subjects, args, outer_fold, run_logger=Non
                     f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
                 run_logger=run_logger,
                 run_logger_tag=f"outer{outer_fold}_cand{cand_idx}_inner{inner_fold}",
+                vit_embed_cache=vit_embed_cache,
+                early_stopping_patience=args.early_stopping_patience,
             )
 
             metrics = result["metrics"]
@@ -683,7 +725,22 @@ def cmd_nested_cv(args):
     """
     set_seed(cfg.SEED)
     device = cfg.DEVICE
+
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
     all_subjects = list_subjects(args.data_dir)
+
+    vit_embed_cache = None
+    if args.vit_cache_path:
+        print(f"\nCarico cache embedding ViT da: {args.vit_cache_path}")
+        t0 = time.time()
+        vit_embed_cache = load_vit_embed_cache(args.vit_cache_path)
+        print(
+            f"  -> {len(vit_embed_cache)} embedding caricate in "
+            f"{time.time() - t0:.1f}s (il backbone ViT NON verra' eseguito)"
+        )
 
     if len(all_subjects) < args.outer_folds:
         raise ValueError(
@@ -736,7 +793,8 @@ def cmd_nested_cv(args):
 
         # 1) INNER CV: selezione iperparametri.
         best_hp, all_candidates = inner_model_selection(
-            outer_train, args, outer_fold, run_logger=run_logger
+            outer_train, args, outer_fold, run_logger=run_logger,
+            vit_embed_cache=vit_embed_cache,
         )
 
         # 2) Refit sul 100% dei soggetti dell'outer training set.
@@ -766,6 +824,9 @@ def cmd_nested_cv(args):
             log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" / f"train_log_outer{outer_fold:02d}_refit.csv",
             run_logger=run_logger,
             run_logger_tag=f"outer{outer_fold}_refit",
+            vit_embed_cache=vit_embed_cache,
+            # niente early stopping nel refit: select_best_on_eval=False,
+            # l'outer test non deve influenzare in alcun modo il training.
         )
 
         test_metrics = final_result["metrics"]
@@ -1039,6 +1100,21 @@ def main():
     p_nested.add_argument(
         "--verbose_inner", action="store_true",
         help="stampa ogni epoca anche durante tutti gli inner fold",
+    )
+    p_nested.add_argument(
+        "--vit_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_vit_embeddings.py; "
+             "se impostato, salta completamente il forward del ViT durante il training",
+    )
+    p_nested.add_argument(
+        "--early_stopping_patience", type=int, default=0,
+        help="numero di epoche senza miglioramento dell'EER dopo cui interrompere "
+             "un fold (0 = disabilitato, gira sempre per il numero di epoche indicato)",
+    )
+    p_nested.add_argument(
+        "--num_workers", type=int, default=None,
+        help="override di cfg.NUM_WORKERS (utile per limitare RAM/CPU su macchine "
+             "poco potenti); default: usa il valore in Config",
     )
     p_nested.set_defaults(func=cmd_nested_cv)
 
