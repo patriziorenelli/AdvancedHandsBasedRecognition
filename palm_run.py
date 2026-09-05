@@ -29,6 +29,7 @@ import datetime
 import itertools
 import json
 import platform
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -1041,9 +1042,54 @@ def cmd_verify(args):
     run_log_path = default_run_log_path(subdir="logs", prefix="verify")
     run_logger = RunLogger(run_log_path, run_type="verify", config=vars(args))
 
+    base1, base2 = args.base1, args.base2
+
+    if not (args.raw1 or args.raw2) and not (base1 and base2):
+        raise ValueError(
+            "Specifica --base1/--base2 (file gia' preprocessati) oppure "
+            "--raw1/--raw2 (foto grezze, verranno preprocessate automaticamente)."
+        )
+
+    # Se sono state passate foto grezze (--raw1/--raw2), le portiamo
+    # prima attraverso la stessa pipeline di preprocessing usata per
+    # costruire il dataset (segmentazione mano, ROI, nocche), cosi'
+    # PalmVerifier riceve input nello stesso identico formato su cui
+    # il modello e' stato allenato. Import lazy: preProcessing.py
+    # richiede mediapipe, non necessario per gli altri comandi.
+    tmp_dir_ctx = None
+    if args.raw1 or args.raw2:
+        if not (args.raw1 and args.raw2):
+            raise ValueError(
+                "Se usi --raw1/--raw2 devi passare entrambe le foto grezze "
+                "(oppure usa --base1/--base2 per file gia' preprocessati)."
+            )
+        try:
+            from preProcessing import process_single_image, init_worker
+        except ImportError as exc:
+            raise ImportError(
+                "Impossibile importare preProcessing.py: assicurati che sia "
+                "nella stessa cartella di palm_run.py e che 'mediapipe' sia "
+                "installato (pip install mediapipe)."
+            ) from exc
+
+        init_worker()  # inizializza il detector mediapipe globale nel modulo
+
+        out_dir = args.preprocess_output_dir or tempfile.mkdtemp(prefix="palm_verify_")
+        out_dir = Path(out_dir)
+        print(f"Preprocessing foto grezze in: {out_dir}")
+
+        base1 = _preprocess_raw_photo(
+            process_single_image, args.raw1, "query1", args.hand_side1, out_dir
+        )
+        base2 = _preprocess_raw_photo(
+            process_single_image, args.raw2, "query2", args.hand_side2, out_dir
+        )
+        print(f"  base1 -> {base1}")
+        print(f"  base2 -> {base2}")
+
     verifier = PalmVerifier(args.checkpoint)
     result = verifier.verify(
-        args.base1, args.base2, threshold=args.threshold
+        base1, base2, threshold=args.threshold
     )
     print(json.dumps(result, indent=2))
     verdict = (
@@ -1059,11 +1105,39 @@ def cmd_verify(args):
     run_logger.log_event(
         "verify_result",
         checkpoint=args.checkpoint,
-        base1=args.base1,
-        base2=args.base2,
+        base1=str(base1),
+        base2=str(base2),
+        raw1=args.raw1,
+        raw2=args.raw2,
         **result,
     )
     run_logger.close(status="completed", **result)
+
+
+def _preprocess_raw_photo(process_single_image, img_path, subject_id, hand_side, out_dir):
+    """
+    Esegue process_single_image() su UNA foto grezza e ritorna il
+    'base_path' (cartella/prefix) da passare a PalmVerifier, nello
+    stesso formato usato per costruire dataset_preprocessed.
+    """
+    task = (str(img_path), subject_id, hand_side, 1, str(out_dir))
+    result = process_single_image(task)
+
+    if result["status"] != "success":
+        raise RuntimeError(
+            f"Preprocessing fallito per {img_path}: "
+            f"status={result['status']}, motivo={result.get('reason')}"
+        )
+
+    side_string = str(hand_side).lower()
+    if "dorsal" in side_string or "dorso" in side_string:
+        raise ValueError(
+            f"--hand_side='{hand_side}' indica una mano dorsale, ma 'verify' "
+            f"lavora sul modello palmo: usa 'left'/'right' (palmo) non dorsal."
+        )
+
+    base_name = f"{subject_id}_{hand_side}_{1:03d}"
+    return Path(out_dir) / subject_id / base_name
 
 
 # ============================================================
@@ -1151,8 +1225,37 @@ def main():
         "verify", help="verifica 1:1 tra due acquisizioni preprocessate"
     )
     p_verify.add_argument("--checkpoint", required=True)
-    p_verify.add_argument("--base1", required=True)
-    p_verify.add_argument("--base2", required=True)
+    p_verify.add_argument(
+        "--base1", default=None,
+        help="base path di un'acquisizione GIA' preprocessata (es. .../1043_right_001)",
+    )
+    p_verify.add_argument(
+        "--base2", default=None,
+        help="come --base1, per la seconda acquisizione",
+    )
+    p_verify.add_argument(
+        "--raw1", default=None,
+        help="percorso a una FOTO GREZZA (non preprocessata) della prima mano; "
+             "alternativo a --base1, applica automaticamente il preprocessing",
+    )
+    p_verify.add_argument(
+        "--raw2", default=None,
+        help="come --raw1, per la seconda foto grezza",
+    )
+    p_verify.add_argument(
+        "--hand_side1", default="right",
+        help="lateralita' della prima foto grezza: 'left'/'right' (solo con --raw1)",
+    )
+    p_verify.add_argument(
+        "--hand_side2", default="right",
+        help="lateralita' della seconda foto grezza: 'left'/'right' (solo con --raw2)",
+    )
+    p_verify.add_argument(
+        "--preprocess_output_dir", default=None,
+        help="cartella dove salvare l'output del preprocessing di --raw1/--raw2 "
+             "(default: cartella temporanea, cancellata dal sistema operativo "
+             "secondo le sue policy)",
+    )
     p_verify.add_argument(
         "--threshold", type=float, default=cfg.VERIFICATION_THRESHOLD
     )

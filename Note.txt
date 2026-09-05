@@ -55,7 +55,6 @@ RIVEDERE:
           
 Comandi esecuzione: 
 
-ORA SI ESEGUE: python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
 
 DA ESEGUIRE:
 
@@ -69,6 +68,15 @@ eseguito:
 python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --batch_size 16
 python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --batch_size 16
 python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
+python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
+
+
+
+Per verificare 2 immagini: python palm_run.py verify --checkpoint "models_final\palm_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-2.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-1.jpg" --hand_side1 left --hand_side2 left
+Test effettuati di verifica di 2 immagini che vengono pre-processate e verificate:
+     - 2 immagini uguali "similarity": 1.0000001192092896, "threshold": 0.55
+     - 2 immagini di 2 soggetti differenti "similarity": similarity=0.4016, soglia=0.5500
+     - 2 immagini differenti dello stesso soggetto similarity=0.9203, soglia=0.550
 
 
 !!! DATASET COMPLETAMENTE PRE-PROCESSATO !!!
