@@ -55,16 +55,20 @@ RIVEDERE:
           
 Comandi esecuzione: 
 
-DA ESEGUIRE:
-python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
+ORA SI ESEGUE: python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
 
-PRIMA DI FARE DORSAL BISOGNA OTTIMIZZARLO SENNO' CI VORRANNO 26 GIORNI
-python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 5 --batch_size 8 --inner_folds 2 --inner_epochs 25 --outer_epochs 30 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 0
+DA ESEGUIRE:
+
+
+Il NESTED IMPIEGHEREBBE MOLTI GIORNI...PROVARE A CAPIRE SE E' POSSIBILE PROVARE CON freeze_mobilenet=true E CON FALSE E SE NON CAMBIA MOLTO IMPOSTARLO A FALSE PER RIDURRE I TEMPI
+PRIMA DI FARE DORSAL BISOGNA OTTIMIZZARLO SE SI PUO' 
+python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 
 ----------------------------------------
 eseguito: 
 python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --batch_size 16
 python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --batch_size 16
+python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 
 
 !!! DATASET COMPLETAMENTE PRE-PROCESSATO !!!

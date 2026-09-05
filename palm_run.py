@@ -510,6 +510,20 @@ def cmd_train(args):
     device = cfg.DEVICE
     print(f"Device: {device}")
 
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
+    vit_embed_cache = None
+    if args.vit_cache_path:
+        print(f"\nCarico cache embedding ViT da: {args.vit_cache_path}")
+        t0 = time.time()
+        vit_embed_cache = load_vit_embed_cache(args.vit_cache_path)
+        print(
+            f"  -> {len(vit_embed_cache)} embedding caricate in "
+            f"{time.time() - t0:.1f}s (il backbone ViT NON verra' eseguito)"
+        )
+
     run_log_path = default_run_log_path(prefix="train")
     run_logger = RunLogger(run_log_path, run_type="train", config=vars(args))
     print(f"Run log: {run_log_path}")
@@ -535,6 +549,8 @@ def cmd_train(args):
             log_csv_path=cfg.FINAL_MODEL_DIR / "train_log.csv",
             run_logger=run_logger,
             run_logger_tag="simple_train",
+            vit_embed_cache=vit_embed_cache,
+            early_stopping_patience=args.early_stopping_patience,
         )
     except Exception as exc:
         run_logger.close(status="failed", error=str(exc))
@@ -1069,6 +1085,18 @@ def main():
     p_train.add_argument("--lr", type=float, default=cfg.LR)
     p_train.add_argument("--freeze_vit", type=parse_bool, default=True)
     p_train.add_argument("--freeze_mobilenet", type=parse_bool, default=False)
+    p_train.add_argument(
+        "--vit_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_vit_embeddings.py",
+    )
+    p_train.add_argument(
+        "--early_stopping_patience", type=int, default=0,
+        help="epoche senza miglioramento EER dopo cui interrompere (0 = disabilitato)",
+    )
+    p_train.add_argument(
+        "--num_workers", type=int, default=None,
+        help="override di cfg.NUM_WORKERS",
+    )
     p_train.set_defaults(func=cmd_train)
 
     # Nested K-Fold.

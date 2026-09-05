@@ -2,3 +2,5 @@ models_final/nested_cv/palm_outer_fold_01.pt
 models_final/nested_cv/palm_outer_fold_02.pt
 models_final/nested_cv/palm_outer_fold_03.pt
 models_final/nested_cv/palm_outer_fold_04.pt
+palm_train_and_log/palm_embedding_final.pt
+models_final/palm_embedding_final.pt
