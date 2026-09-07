@@ -182,6 +182,8 @@ class _KnuckleMobileNet(nn.Module):
         self.features = net.features
         self.avgpool = net.avgpool
         in_feat = net.classifier[0].in_features
+        self.in_feat = in_feat  # dimensione delle feature pre-proj (per la cache)
+        self.freeze_backbone = freeze_backbone
         if freeze_backbone:
             for p in self.features.parameters():
                 p.requires_grad = False
@@ -190,7 +192,18 @@ class _KnuckleMobileNet(nn.Module):
         )
 
     def forward(self, x):
-        f = self.avgpool(self.features(x)).flatten(1)
+        # Se x ha gia' 2 dimensioni (B, in_feat) sono feature del backbone
+        # PRE-CALCOLATE (vedi precompute_knuckle_embeddings.py): valido SOLO
+        # quando freeze_backbone=True, perche' 'proj' sopra resta comunque
+        # allenabile e viene eseguito normalmente.
+        if x.dim() == 2:
+            f = x
+        else:
+            ctx = torch.no_grad() if self.freeze_backbone else torch.enable_grad()
+            with ctx:
+                f = self.avgpool(self.features(x)).flatten(1)
+            if self.freeze_backbone:
+                f = f.detach()
         return self.proj(f)
 
 
@@ -206,8 +219,13 @@ class KnuckleMobileNetBranch(nn.Module):
         self.out_proj = nn.Linear(128, out_dim)
 
     def forward(self, x, mask=None):
-        b, n, c, h, w = x.shape
-        feats = self.cnn(x.view(b * n, c, h, w)).view(b, n, -1)
+        if x.dim() == 5:
+            b, n, c, h, w = x.shape
+            feats = self.cnn(x.view(b * n, c, h, w)).view(b, n, -1)
+        else:
+            # x gia' ridotto a (B, N, in_feat): feature backbone precalcolate.
+            b, n, feat_dim = x.shape
+            feats = self.cnn(x.reshape(b * n, feat_dim)).view(b, n, -1)
         scores = self.attn(feats).squeeze(-1)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, float("-inf"))
@@ -294,7 +312,9 @@ class DorsalBiometricDataset(Dataset):
     """Legge direttamente la struttura di output di preProcessing.py (solo campioni dorsali)."""
 
     def __init__(self, data_dir, subject_ids=None, train: bool = True,
-                 swin_embed_cache: dict | None = None):
+                 swin_embed_cache: dict | None = None,
+                 knuckle_embed_cache: dict | None = None,
+                 knuckle_feat_dim: int | None = None):
         self.data_dir = Path(data_dir)
         self.hand_tf = dorsal_hand_transform(train)
         self.knuckle_tf = knuckle_transform(train)
@@ -303,6 +323,12 @@ class DorsalBiometricDataset(Dataset):
         # enhance_veins() (Frangi) sia il forward dello Swin (il backbone
         # e' sempre congelato) e restituiamo direttamente l'embedding.
         self.swin_embed_cache = swin_embed_cache
+        # Dict {percorso_assoluto_crop_nocca: np.ndarray(in_feat,)} prodotto
+        # da precompute_knuckle_embeddings.py. VALIDO SOLO se il training
+        # userà freeze_mobilenet=True: il backbone MobileNet delle nocche
+        # deve restare congelato perche' l'embedding cachato sia corretto.
+        self.knuckle_embed_cache = knuckle_embed_cache
+        self.knuckle_feat_dim = knuckle_feat_dim
 
         all_subject_dirs = sorted(d for d in self.data_dir.iterdir() if d.is_dir())
         if subject_ids is not None:
@@ -343,12 +369,28 @@ class DorsalBiometricDataset(Dataset):
 
     def __getitem__(self, idx):
         s = self.samples[idx]
-        c, h, w = 3, *cfg.DORSAL_KNUCKLE_SIZE
-        knuckle_feats = torch.zeros((self.n_knuckles_max, c, h, w), dtype=torch.float32)
-        knuckle_mask = np.zeros((self.n_knuckles_max,), dtype=np.float32)
-        for i, kp in enumerate(s["knuckle_paths"][: self.n_knuckles_max]):
-            knuckle_feats[i] = self._load_rgb(kp, self.knuckle_tf)
-            knuckle_mask[i] = 1.0
+
+        if self.knuckle_embed_cache is not None:
+            knuckle_feats = torch.zeros(
+                (self.n_knuckles_max, self.knuckle_feat_dim), dtype=torch.float32
+            )
+            knuckle_mask = np.zeros((self.n_knuckles_max,), dtype=np.float32)
+            for i, kp in enumerate(s["knuckle_paths"][: self.n_knuckles_max]):
+                key = str(kp.resolve())
+                if key not in self.knuckle_embed_cache:
+                    raise KeyError(
+                        f"Nessuna embedding nocca precalcolata per {key}. "
+                        f"Rilancia precompute_knuckle_embeddings.py sull'intero data_dir."
+                    )
+                knuckle_feats[i] = torch.from_numpy(self.knuckle_embed_cache[key]).float()
+                knuckle_mask[i] = 1.0
+        else:
+            c, h, w = 3, *cfg.DORSAL_KNUCKLE_SIZE
+            knuckle_feats = torch.zeros((self.n_knuckles_max, c, h, w), dtype=torch.float32)
+            knuckle_mask = np.zeros((self.n_knuckles_max,), dtype=np.float32)
+            for i, kp in enumerate(s["knuckle_paths"][: self.n_knuckles_max]):
+                knuckle_feats[i] = self._load_rgb(kp, self.knuckle_tf)
+                knuckle_mask[i] = 1.0
 
         if self.swin_embed_cache is not None:
             key = str(s["hand_path"].resolve())

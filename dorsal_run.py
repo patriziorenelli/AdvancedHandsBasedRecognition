@@ -25,9 +25,12 @@ python dorsal_run.py verify --checkpoint models_final_dorsal/dorsal_embedding_be
 
 from __future__ import annotations
 import argparse
+import datetime
 import itertools
 import json
+import platform
 import time
+import uuid
 from pathlib import Path
 
 import cv2
@@ -187,17 +190,37 @@ def evaluate_open_set(model, loader, device):
     return compute_eer(torch.cat(all_emb, dim=0), all_subj)
 
 
+def load_knuckle_embed_cache(path):
+    """
+    Carica il file prodotto da precompute_knuckle_embeddings.py: un .npz con
+    - 'paths': array di stringhe (percorsi assoluti dei crop nocca)
+    - 'embeds': array (N, in_feat) float32
+    Ritorna (dict {percorso: np.ndarray(in_feat,)}, in_feat).
+    """
+    data = np.load(path, allow_pickle=True)
+    paths = data["paths"]
+    embeds = data["embeds"]
+    if len(paths) != len(embeds):
+        raise ValueError("Cache nocche corrotta: paths ed embeds hanno lunghezze diverse")
+    cache = {str(p): embeds[i] for i, p in enumerate(paths)}
+    feat_dim = embeds.shape[1]
+    return cache, feat_dim
+
+
 def build_datasets(data_dir, train_subjects, eval_subjects=None,
-                   n_knuckles_max=None, swin_embed_cache=None):
+                   n_knuckles_max=None, swin_embed_cache=None,
+                   knuckle_embed_cache=None, knuckle_feat_dim=None):
     train_ds = DorsalBiometricDataset(
         data_dir, subject_ids=train_subjects, train=True,
         swin_embed_cache=swin_embed_cache,
+        knuckle_embed_cache=knuckle_embed_cache, knuckle_feat_dim=knuckle_feat_dim,
     )
     eval_ds = None
     if eval_subjects is not None:
         eval_ds = DorsalBiometricDataset(
             data_dir, subject_ids=eval_subjects, train=False,
             swin_embed_cache=swin_embed_cache,
+            knuckle_embed_cache=knuckle_embed_cache, knuckle_feat_dim=knuckle_feat_dim,
         )
 
     if n_knuckles_max is None:
@@ -234,6 +257,56 @@ def init_csv_logger(path):
     return log_row, f
 
 
+class RunLogger:
+    """
+    Logger di run in formato JSON Lines (un evento JSON per riga, facile
+    da leggere/streamare/analizzare con pandas: pd.read_json(path, lines=True)).
+
+    Raccoglie in un unico file: configurazione del comando (run_start), i
+    dati usati per train/eval (dataset), le metriche epoca-per-epoca
+    (epoch), le metriche di valutazione/selezione (evaluation) e il
+    risultato finale del run (run_end). Non sostituisce il CSV per-epoca
+    gia' presente (init_csv_logger): lo affianca con una traccia completa.
+    """
+
+    def __init__(self, path, run_type, config=None):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.run_id = uuid.uuid4().hex[:12]
+        self.run_type = run_type
+        self._file = open(self.path, "a", encoding="utf-8")
+        self.log_event(
+            "run_start",
+            config=config or {},
+            device=str(cfg.DEVICE),
+            python_version=platform.python_version(),
+            torch_version=torch.__version__,
+            cuda_available=torch.cuda.is_available(),
+        )
+
+    def log_event(self, event, **data):
+        record = {
+            "run_id": self.run_id,
+            "run_type": self.run_type,
+            "event": event,
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            **data,
+        }
+        self._file.write(json.dumps(record, default=str) + "\n")
+        self._file.flush()
+        return record
+
+    def close(self, status="completed", **final_data):
+        self.log_event("run_end", status=status, **final_data)
+        self._file.close()
+
+
+def default_run_log_path(subdir="logs", prefix="run"):
+    """Percorso di default per il file di log di un run: logs/<prefix>_<timestamp>_<id>.jsonl"""
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return cfg.FINAL_MODEL_DIR / subdir / f"{prefix}_{ts}_{uuid.uuid4().hex[:6]}.jsonl"
+
+
 def load_swin_embed_cache(path):
     """
     Carica il file prodotto da precompute_swin_embeddings.py: un .npz con
@@ -252,7 +325,9 @@ def load_swin_embed_cache(path):
 def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 freeze_swin, freeze_mobilenet, seed,
                 eval_subjects=None, verbose=True, select_best_on_eval=True,
-                log_csv_path=None, swin_embed_cache=None, early_stopping_patience=0):
+                log_csv_path=None, swin_embed_cache=None, early_stopping_patience=0,
+                knuckle_embed_cache=None, knuckle_feat_dim=None,
+                run_logger=None, run_logger_tag=None):
     """
     Addestra un modello su train_subjects.
 
@@ -264,10 +339,31 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
     device = cfg.DEVICE
 
     train_ds, eval_ds, n_knuckles = build_datasets(
-        data_dir, train_subjects, eval_subjects, swin_embed_cache=swin_embed_cache
+        data_dir, train_subjects, eval_subjects, swin_embed_cache=swin_embed_cache,
+        knuckle_embed_cache=knuckle_embed_cache, knuckle_feat_dim=knuckle_feat_dim,
     )
     if len(train_ds) == 0:
         raise RuntimeError("Dataset di training vuoto per questo fold")
+
+    if run_logger is not None:
+        run_logger.log_event(
+            "dataset",
+            tag=run_logger_tag,
+            data_dir=str(data_dir),
+            n_train_subjects=len(train_subjects),
+            train_subjects=list(train_subjects),
+            n_train_samples=len(train_ds),
+            num_classes=train_ds.num_classes,
+            n_knuckles=n_knuckles,
+            n_eval_subjects=len(eval_subjects) if eval_subjects is not None else 0,
+            eval_subjects=list(eval_subjects) if eval_subjects is not None else [],
+            n_eval_samples=len(eval_ds) if eval_ds is not None else 0,
+            hyperparameters={
+                "epochs": epochs, "batch_size": batch_size, "lr": lr,
+                "freeze_swin": freeze_swin, "freeze_mobilenet": freeze_mobilenet,
+                "seed": seed,
+            },
+        )
 
     train_loader = make_loader(train_ds, batch_size, shuffle=True, drop_last=True)
     eval_loader = (
@@ -341,7 +437,6 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
             print(msg)
 
         if log_row is not None:
-            import datetime
             log_row({
                 "epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
                 "eval_eer": metrics["eer"] if metrics else "",
@@ -350,6 +445,18 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                 "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             })
 
+        if run_logger is not None:
+            run_logger.log_event(
+                "epoch",
+                tag=run_logger_tag,
+                epoch=epoch, epochs=epochs,
+                train_loss=train_loss, train_acc=train_acc,
+                eval_eer=metrics["eer"] if metrics else None,
+                eval_eer_threshold=metrics["eer_threshold"] if metrics else None,
+                is_best_so_far=bool(metrics is not None and metrics["eer"] == best_eer),
+                lr=scheduler.get_last_lr()[0], epoch_seconds=round(dt, 2),
+            )
+
         if (early_stopping_patience > 0 and eval_loader is not None
                 and select_best_on_eval and epochs_since_improvement >= early_stopping_patience):
             if verbose:
@@ -357,6 +464,11 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
                     f"  [early stopping] nessun miglioramento EER da "
                     f"{epochs_since_improvement} epoche (best epoch={best_epoch}, "
                     f"best EER={best_eer*100:.2f}%). Interrompo a epoca {epoch}/{epochs}."
+                )
+            if run_logger is not None:
+                run_logger.log_event(
+                    "early_stopping", tag=run_logger_tag,
+                    stopped_at_epoch=epoch, best_epoch=best_epoch, best_eer=best_eer,
                 )
             break
 
@@ -379,6 +491,16 @@ def train_model(train_subjects, data_dir, epochs, batch_size, lr,
         best_epoch = epochs
         best_eer = None
 
+    if run_logger is not None:
+        run_logger.log_event(
+            "evaluation",
+            tag=run_logger_tag,
+            best_epoch=best_epoch,
+            best_eer=best_eer,
+            final_eer=final_metrics["eer"] if final_metrics else None,
+            final_eer_threshold=final_metrics["eer_threshold"] if final_metrics else None,
+        )
+
     return {
         "model": model,
         "head": head,
@@ -398,6 +520,30 @@ def cmd_train(args):
     device = cfg.DEVICE
     print(f"Device: {device}")
 
+    run_log_path = default_run_log_path(prefix="train")
+    run_logger = RunLogger(run_log_path, run_type="train", config=vars(args))
+    print(f"Run log: {run_log_path}")
+
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
+    swin_embed_cache = None
+    if args.swin_cache_path:
+        print(f"\nCarico cache embedding Swin da: {args.swin_cache_path}")
+        swin_embed_cache = load_swin_embed_cache(args.swin_cache_path)
+        print(f"  -> {len(swin_embed_cache)} embedding caricate")
+
+    knuckle_embed_cache, knuckle_feat_dim = None, None
+    if args.knuckle_cache_path:
+        if not args.freeze_mobilenet:
+            raise ValueError(
+                "--knuckle_cache_path richiede --freeze_mobilenet true."
+            )
+        print(f"\nCarico cache embedding nocche da: {args.knuckle_cache_path}")
+        knuckle_embed_cache, knuckle_feat_dim = load_knuckle_embed_cache(args.knuckle_cache_path)
+        print(f"  -> {len(knuckle_embed_cache)} embedding caricate (dim={knuckle_feat_dim})")
+
     train_subjects, val_subjects = split_subjects(args.data_dir)
     print(
         f"Soggetti train: {len(train_subjects)} | "
@@ -416,6 +562,12 @@ def cmd_train(args):
         eval_subjects=val_subjects,
         verbose=True,
         log_csv_path=cfg.FINAL_MODEL_DIR / "train_log.csv",
+        swin_embed_cache=swin_embed_cache,
+        early_stopping_patience=args.early_stopping_patience,
+        knuckle_embed_cache=knuckle_embed_cache,
+        knuckle_feat_dim=knuckle_feat_dim,
+        run_logger=run_logger,
+        run_logger_tag="simple_train",
     )
 
     model = result["model"]
@@ -439,6 +591,13 @@ def cmd_train(args):
             f"@thr={result['metrics']['eer_threshold']:.3f}"
         )
 
+    run_logger.close(
+        status="completed",
+        checkpoint=str(final_path),
+        best_epoch=result["best_epoch"],
+        best_eer=best_eer,
+    )
+
 
 # ============================================================
 # NESTED K-FOLD
@@ -458,7 +617,9 @@ def make_hyperparameter_grid(args):
     return grid
 
 
-def inner_model_selection(outer_train_subjects, args, outer_fold, swin_embed_cache=None):
+def inner_model_selection(outer_train_subjects, args, outer_fold,
+                           swin_embed_cache=None, knuckle_embed_cache=None,
+                           knuckle_feat_dim=None, run_logger=None):
     """
     INNER LOOP:
     - nessun soggetto dell'outer test entra qui;
@@ -510,6 +671,10 @@ def inner_model_selection(outer_train_subjects, args, outer_fold, swin_embed_cac
                     f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
                 swin_embed_cache=swin_embed_cache,
                 early_stopping_patience=args.early_stopping_patience,
+                knuckle_embed_cache=knuckle_embed_cache,
+                knuckle_feat_dim=knuckle_feat_dim,
+                run_logger=run_logger,
+                run_logger_tag=f"outer{outer_fold}_cand{cand_idx}_inner{inner_fold}",
             )
 
             metrics = result["metrics"]
@@ -550,6 +715,13 @@ def inner_model_selection(outer_train_subjects, args, outer_fold, swin_embed_cac
             f"+/- {std_eer*100:.2f}% | epoch finale suggerita={mean_epoch}"
         )
 
+        if run_logger is not None:
+            run_logger.log_event(
+                "inner_candidate_result",
+                outer_fold=outer_fold, candidate_index=cand_idx,
+                **candidate_results[-1],
+            )
+
     # Tie-break: prima EER medio, poi deviazione standard.
     candidate_results.sort(key=lambda x: (x["mean_eer"], x["std_eer"]))
     best = candidate_results[0]
@@ -581,11 +753,19 @@ def cmd_nested_cv(args):
     set_seed(cfg.SEED)
     device = cfg.DEVICE
 
+    run_log_path = default_run_log_path(prefix="nested_cv")
+    run_logger = RunLogger(run_log_path, run_type="nested_cv", config=vars(args))
+    print(f"Run log: {run_log_path}")
+
     if args.num_workers is not None:
         cfg.NUM_WORKERS = args.num_workers
         print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
 
     all_subjects = list_subjects(args.data_dir)
+    run_logger.log_event(
+        "dataset_overview", data_dir=str(args.data_dir),
+        n_subjects=len(all_subjects), subjects=all_subjects,
+    )
 
     swin_embed_cache = None
     if args.swin_cache_path:
@@ -595,6 +775,22 @@ def cmd_nested_cv(args):
         print(
             f"  -> {len(swin_embed_cache)} embedding caricate in "
             f"{time.time() - t0:.1f}s (backbone Swin + enhance_veins NON verranno eseguiti)"
+        )
+
+    knuckle_embed_cache, knuckle_feat_dim = None, None
+    if args.knuckle_cache_path:
+        if any(not fm for fm in args.freeze_mobilenet_grid):
+            raise ValueError(
+                "--knuckle_cache_path richiede --freeze_mobilenet_grid composta "
+                "SOLO da 'true': con freeze_mobilenet=False il backbone nocche "
+                "viene allenato e la cache diventerebbe non valida."
+            )
+        print(f"\nCarico cache embedding nocche da: {args.knuckle_cache_path}")
+        t0 = time.time()
+        knuckle_embed_cache, knuckle_feat_dim = load_knuckle_embed_cache(args.knuckle_cache_path)
+        print(
+            f"  -> {len(knuckle_embed_cache)} embedding caricate (dim={knuckle_feat_dim}) in "
+            f"{time.time() - t0:.1f}s (backbone MobileNet nocche NON verra' eseguito)"
         )
 
     if len(all_subjects) < args.outer_folds:
@@ -638,7 +834,9 @@ def cmd_nested_cv(args):
 
         # 1) INNER CV: selezione iperparametri.
         best_hp, all_candidates = inner_model_selection(
-            outer_train, args, outer_fold, swin_embed_cache=swin_embed_cache
+            outer_train, args, outer_fold, swin_embed_cache=swin_embed_cache,
+            knuckle_embed_cache=knuckle_embed_cache, knuckle_feat_dim=knuckle_feat_dim,
+            run_logger=run_logger,
         )
 
         # 2) Refit sul 100% dei soggetti dell'outer training set.
@@ -667,6 +865,8 @@ def cmd_nested_cv(args):
             select_best_on_eval=False,   # l'outer test NON influenza il training
             log_csv_path=cfg.FINAL_MODEL_DIR / "nested_cv" / f"train_log_outer{outer_fold:02d}_refit.csv",
             swin_embed_cache=swin_embed_cache,
+            knuckle_embed_cache=knuckle_embed_cache, knuckle_feat_dim=knuckle_feat_dim,
+            run_logger=run_logger, run_logger_tag=f"outer{outer_fold}_refit",
         )
 
         test_metrics = final_result["metrics"]
@@ -704,6 +904,8 @@ def cmd_nested_cv(args):
             "checkpoint": str(fold_path),
         }
         outer_results.append(fold_result)
+
+        run_logger.log_event("outer_fold_result", **fold_result)
 
         print(
             f"\n[OUTER {outer_fold}] FINAL TEST (mai usato nell'inner CV): "
@@ -754,6 +956,11 @@ def cmd_nested_cv(args):
     print(f"Min EER: {eers.min()*100:.2f}% | Max EER: {eers.max()*100:.2f}%")
     print(f"Threshold EER medio (solo descrittivo): {thresholds.mean():.3f}")
     print(f"Summary JSON: {summary_path}")
+    print(f"Run log: {run_log_path}")
+
+    run_logger.close(
+        status="completed", summary=summary["summary"], summary_json=str(summary_path)
+    )
 
 
 # ============================================================
@@ -886,6 +1093,10 @@ def main():
     p_train.add_argument("--lr", type=float, default=cfg.LR)
     p_train.add_argument("--freeze_swin", type=parse_bool, default=True)
     p_train.add_argument("--freeze_mobilenet", type=parse_bool, default=False)
+    p_train.add_argument("--swin_cache_path", type=str, default=None)
+    p_train.add_argument("--knuckle_cache_path", type=str, default=None)
+    p_train.add_argument("--early_stopping_patience", type=int, default=0)
+    p_train.add_argument("--num_workers", type=int, default=None)
     p_train.set_defaults(func=cmd_train)
 
     # Nested K-Fold.
@@ -922,6 +1133,11 @@ def main():
         "--swin_cache_path", type=str, default=None,
         help="percorso al file .npz prodotto da precompute_swin_embeddings.py; "
              "se impostato, salta enhance_veins()+forward Swin durante il training",
+    )
+    p_nested.add_argument(
+        "--knuckle_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_knuckle_embeddings.py; "
+             "richiede --freeze_mobilenet_grid composta solo da 'true'",
     )
     p_nested.add_argument(
         "--early_stopping_patience", type=int, default=0,

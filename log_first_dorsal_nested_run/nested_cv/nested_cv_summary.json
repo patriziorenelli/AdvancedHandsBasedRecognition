@@ -1,0 +1,144 @@
+{
+  "protocol": {
+    "name": "Nested K-Fold subject-disjoint",
+    "outer_folds": 2,
+    "inner_folds": 2,
+    "seed": 42,
+    "selection_metric": "open-set EER",
+    "unit_of_split": "subject_id"
+  },
+  "n_subjects": 189,
+  "outer_folds": [
+    {
+      "outer_fold": 1,
+      "n_outer_train_subjects": 94,
+      "n_outer_test_subjects": 95,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_swin": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.1232,
+        "std_eer": 0.008250000000000007,
+        "fold_eers": [
+          0.11495,
+          0.13145
+        ],
+        "selected_epochs": [
+          7,
+          4
+        ],
+        "mean_best_epoch": 6
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.1232,
+          "std_eer": 0.008250000000000007,
+          "fold_eers": [
+            0.11495,
+            0.13145
+          ],
+          "selected_epochs": [
+            7,
+            4
+          ],
+          "mean_best_epoch": 6
+        },
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.140575,
+          "std_eer": 0.0019750000000000045,
+          "fold_eers": [
+            0.1386,
+            0.14255
+          ],
+          "selected_epochs": [
+            8,
+            7
+          ],
+          "mean_best_epoch": 8
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.09175,
+        "eer_threshold": 0.27855711422845686,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "models_final_dorsal\\nested_cv\\dorsal_outer_fold_01.pt"
+    },
+    {
+      "outer_fold": 2,
+      "n_outer_train_subjects": 95,
+      "n_outer_test_subjects": 94,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_swin": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.1175,
+        "std_eer": 0.03825,
+        "fold_eers": [
+          0.07925,
+          0.15575
+        ],
+        "selected_epochs": [
+          8,
+          8
+        ],
+        "mean_best_epoch": 8
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.1175,
+          "std_eer": 0.03825,
+          "fold_eers": [
+            0.07925,
+            0.15575
+          ],
+          "selected_epochs": [
+            8,
+            8
+          ],
+          "mean_best_epoch": 8
+        },
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.15205,
+          "std_eer": 0.006650000000000017,
+          "fold_eers": [
+            0.1587,
+            0.14539999999999997
+          ],
+          "selected_epochs": [
+            8,
+            8
+          ],
+          "mean_best_epoch": 8
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.0932,
+        "eer_threshold": 0.2745490981963927,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "models_final_dorsal\\nested_cv\\dorsal_outer_fold_02.pt"
+    }
+  ],
+  "summary": {
+    "mean_outer_eer": 0.092475,
+    "std_outer_eer": 0.0007250000000000034,
+    "min_outer_eer": 0.09175,
+    "max_outer_eer": 0.0932,
+    "mean_eer_threshold": 0.2765531062124248
+  }
+}

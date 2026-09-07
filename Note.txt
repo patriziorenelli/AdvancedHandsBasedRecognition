@@ -58,10 +58,13 @@ Comandi esecuzione:
 
 DA ESEGUIRE:
 
+STO ESEGUENDO IL NESTED STIMATI 70 ORE INIZIATO IL 7/09 ALLE 2:00
 
-Il NESTED IMPIEGHEREBBE MOLTI GIORNI...PROVARE A CAPIRE SE E' POSSIBILE PROVARE CON freeze_mobilenet=true E CON FALSE E SE NON CAMBIA MOLTO IMPOSTARLO A FALSE PER RIDURRE I TEMPI
-PRIMA DI FARE DORSAL BISOGNA OTTIMIZZARLO SE SI PUO' 
-python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
+COMANDO PER NESTED: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+COMANDO PER TRAINING: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
+POI PROVARE IL VERIFY
+
+
 
 ----------------------------------------
 eseguito: 
@@ -70,9 +73,20 @@ python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\
 python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
 
+----
+ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO 
+ python precompute_knuckle_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\knuckle_cache.npz" --batch_size 16
+ python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 2 --inner_folds 2 --inner_epochs 8 --outer_epochs 8 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+----
 
 
-Per verificare 2 immagini: python palm_run.py verify --checkpoint "models_final\palm_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-2.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-1.jpg" --hand_side1 left --hand_side2 left
+
+
+
+
+Per verificare 2 immagini: 
+comando: python palm_run.py verify --checkpoint "models_final\palm_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-2.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-1.jpg" --hand_side1 left --hand_side2 left
+Usate immagini da un nuovo dataset https://www.mutah.edu.jo/biometrix/hand-images-databases.aspx in modo da non utilizzare le stesse usate per il training e test 
 Test effettuati di verifica di 2 immagini che vengono pre-processate e verificate:
      - 2 immagini uguali "similarity": 1.0000001192092896, "threshold": 0.55
      - 2 immagini di 2 soggetti differenti "similarity": similarity=0.4016, soglia=0.5500
@@ -90,3 +104,513 @@ Risultati preprocessing:
 
 ON WORKING:
 Training palmo eseguendo palm_run 
+
+
+----------------------------------------
+
+LOG: 
+PS D:\Users\Patrizio\Desktop\Tesi\AdvancedHandsBasedRecognition> python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 2 --inner_folds 2 --inner_epochs 8 --outer_epochs 8 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+NUM_WORKERS impostato a 1 da CLI
+
+Carico cache embedding Swin da: D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz
+  -> 4945 embedding caricate in 0.1s (backbone Swin + enhance_veins NON verranno eseguiti)
+
+========================================================================
+NESTED K-FOLD - DORSAL BIOMETRIC EMBEDDING
+========================================================================
+Device: cpu
+Soggetti totali: 189
+Outer folds: 2
+Inner folds: 2
+Inner epochs: 8
+Outer epochs: 8
+Output: models_final_dorsal\nested_cv
+
+########################################################################
+OUTER FOLD 1/2 | train+inner=94 | final test=95
+########################################################################
+
+[OUTER 1] INNER MODEL SELECTION
+  Soggetti disponibili per inner CV: 94 | candidati: 2
+
+  Candidato 1/2: lr=0.0001 freeze_swin=True freeze_mobilenet=False
+    [Inner 1/2] train_subjects=47 val_subjects=47
+  [epoch 1] step 0/85 loss=14.4053 acc=0.0000
+  [epoch 1] step 20/85 loss=12.7304 acc=0.0000
+  [epoch 1] step 40/85 loss=11.4760 acc=0.0000
+  [epoch 1] step 60/85 loss=8.8604 acc=0.0041
+  [epoch 1] step 80/85 loss=8.9023 acc=0.0062
+  [epoch 2] step 0/85 loss=5.7500 acc=0.1250
+  [epoch 2] step 20/85 loss=7.3859 acc=0.1012
+  [epoch 2] step 40/85 loss=5.4920 acc=0.1296
+  [epoch 2] step 60/85 loss=6.0028 acc=0.1680
+  [epoch 2] step 80/85 loss=2.3385 acc=0.2153
+  [epoch 3] step 0/85 loss=3.0721 acc=0.5625
+  [epoch 3] step 20/85 loss=3.5289 acc=0.4851
+  [epoch 3] step 40/85 loss=2.6633 acc=0.4909
+  [epoch 3] step 60/85 loss=1.2950 acc=0.5277
+  [epoch 3] step 80/85 loss=0.4369 acc=0.5401
+  [epoch 4] step 0/85 loss=0.8663 acc=0.6875
+  [epoch 4] step 20/85 loss=1.6844 acc=0.7054
+  [epoch 4] step 40/85 loss=1.8789 acc=0.7317
+  [epoch 4] step 60/85 loss=0.6462 acc=0.7480
+  [epoch 4] step 80/85 loss=0.3511 acc=0.7500
+  [epoch 5] step 0/85 loss=1.3527 acc=0.6250
+  [epoch 5] step 20/85 loss=0.2081 acc=0.8661
+  [epoch 5] step 40/85 loss=0.5418 acc=0.8720
+  [epoch 5] step 60/85 loss=0.6161 acc=0.8648
+  [epoch 5] step 80/85 loss=0.1802 acc=0.8673
+  [epoch 6] step 0/85 loss=0.2163 acc=0.9375
+  [epoch 6] step 20/85 loss=0.1225 acc=0.9315
+  [epoch 6] step 40/85 loss=0.5539 acc=0.9207
+  [epoch 6] step 60/85 loss=0.0301 acc=0.9252
+  [epoch 6] step 80/85 loss=0.2655 acc=0.9298
+  [epoch 7] step 0/85 loss=0.6471 acc=0.9375
+  [epoch 7] step 20/85 loss=0.2415 acc=0.9643
+  [epoch 7] step 40/85 loss=0.5620 acc=0.9482
+  [epoch 7] step 60/85 loss=0.3451 acc=0.9385
+  [epoch 7] step 80/85 loss=0.0087 acc=0.9421
+  [epoch 8] step 0/85 loss=0.0748 acc=1.0000
+  [epoch 8] step 20/85 loss=0.0769 acc=0.9435
+  [epoch 8] step 40/85 loss=0.2807 acc=0.9558
+  [epoch 8] step 60/85 loss=0.0223 acc=0.9559
+  [epoch 8] step 80/85 loss=0.0262 acc=0.9560
+      -> Inner EER=11.49% @thr=0.275 (best epoch=7)
+    [Inner 2/2] train_subjects=47 val_subjects=47
+  [epoch 1] step 0/83 loss=13.9544 acc=0.0000
+  [epoch 1] step 20/83 loss=12.8104 acc=0.0000
+  [epoch 1] step 40/83 loss=10.1720 acc=0.0000
+  [epoch 1] step 60/83 loss=9.6638 acc=0.0020
+  [epoch 1] step 80/83 loss=8.6668 acc=0.0093
+  [epoch 2] step 0/83 loss=7.0330 acc=0.0000
+  [epoch 2] step 20/83 loss=7.2391 acc=0.0833
+  [epoch 2] step 40/83 loss=5.5377 acc=0.1433
+  [epoch 2] step 60/83 loss=4.2113 acc=0.2070
+  [epoch 2] step 80/83 loss=3.3205 acc=0.2492
+  [epoch 3] step 0/83 loss=2.1726 acc=0.5000
+  [epoch 3] step 20/83 loss=2.2682 acc=0.4554
+  [epoch 3] step 40/83 loss=2.5325 acc=0.4878
+  [epoch 3] step 60/83 loss=0.5481 acc=0.5379
+  [epoch 3] step 80/83 loss=0.8031 acc=0.5463
+  [epoch 4] step 0/83 loss=1.5448 acc=0.5000
+  [epoch 4] step 20/83 loss=2.5377 acc=0.6815
+  [epoch 4] step 40/83 loss=0.6204 acc=0.7180
+  [epoch 4] step 60/83 loss=0.4976 acc=0.7152
+  [epoch 4] step 80/83 loss=0.5252 acc=0.7353
+  [epoch 5] step 0/83 loss=0.4981 acc=0.8750
+  [epoch 5] step 20/83 loss=0.7996 acc=0.8214
+  [epoch 5] step 40/83 loss=0.3313 acc=0.8445
+  [epoch 5] step 60/83 loss=0.4076 acc=0.8463
+  [epoch 5] step 80/83 loss=0.5668 acc=0.8480
+  [epoch 6] step 0/83 loss=0.2208 acc=1.0000
+  [epoch 6] step 20/83 loss=0.3662 acc=0.9137
+  [epoch 6] step 40/83 loss=0.0489 acc=0.8933
+  [epoch 6] step 60/83 loss=0.5878 acc=0.8975
+  [epoch 6] step 80/83 loss=0.2676 acc=0.9051
+  [epoch 7] step 0/83 loss=0.0567 acc=1.0000
+  [epoch 7] step 20/83 loss=0.0398 acc=0.9524
+  [epoch 7] step 40/83 loss=0.5641 acc=0.9512
+  [epoch 7] step 60/83 loss=0.6958 acc=0.9467
+  [epoch 7] step 80/83 loss=0.5987 acc=0.9468
+      -> Inner EER=13.15% @thr=0.411 (best epoch=4)
+  ==> Candidato 1: mean EER=12.32% +/- 0.83% | epoch finale suggerita=6
+
+  Candidato 2/2: lr=0.0001 freeze_swin=True freeze_mobilenet=True
+    [Inner 1/2] train_subjects=47 val_subjects=47
+  [epoch 1] step 0/87 loss=14.0491 acc=0.0000
+  [epoch 1] step 20/87 loss=12.3846 acc=0.0000
+  [epoch 1] step 40/87 loss=10.9708 acc=0.0000
+  [epoch 1] step 60/87 loss=9.3653 acc=0.0000
+  [epoch 1] step 80/87 loss=9.1167 acc=0.0031
+  [epoch 2] step 0/87 loss=8.6115 acc=0.0625
+  [epoch 2] step 20/87 loss=6.4570 acc=0.1131
+  [epoch 2] step 40/87 loss=5.8145 acc=0.1082
+  [epoch 2] step 60/87 loss=4.6396 acc=0.1270
+  [epoch 2] step 80/87 loss=5.1395 acc=0.1458
+  [epoch 3] step 0/87 loss=4.0389 acc=0.1875
+  [epoch 3] step 20/87 loss=4.1953 acc=0.3661
+  [epoch 3] step 40/87 loss=4.8040 acc=0.3750
+  [epoch 3] step 60/87 loss=2.3631 acc=0.3986
+  [epoch 3] step 80/87 loss=2.5696 acc=0.4074
+  [epoch 4] step 0/87 loss=2.2176 acc=0.5000
+  [epoch 4] step 20/87 loss=1.8184 acc=0.5387
+  [epoch 4] step 40/87 loss=1.0186 acc=0.5732
+  [epoch 4] step 60/87 loss=1.8748 acc=0.5932
+  [epoch 4] step 80/87 loss=1.9417 acc=0.6042
+  [epoch 5] step 0/87 loss=1.5634 acc=0.7500
+  [epoch 5] step 20/87 loss=1.1529 acc=0.6369
+  [epoch 5] step 40/87 loss=2.0825 acc=0.6723
+  [epoch 5] step 60/87 loss=0.7889 acc=0.6834
+  [epoch 5] step 80/87 loss=1.8050 acc=0.6867
+  [epoch 6] step 0/87 loss=0.6087 acc=0.9375
+  [epoch 6] step 20/87 loss=0.7095 acc=0.8036
+  [epoch 6] step 40/87 loss=0.5446 acc=0.7866
+  [epoch 6] step 60/87 loss=0.6353 acc=0.7838
+  [epoch 6] step 80/87 loss=0.7429 acc=0.7762
+  [epoch 7] step 0/87 loss=0.6584 acc=0.7500
+  [epoch 7] step 20/87 loss=0.0574 acc=0.8333
+  [epoch 7] step 40/87 loss=1.0178 acc=0.8323
+  [epoch 7] step 60/87 loss=1.4048 acc=0.8279
+  [epoch 7] step 80/87 loss=0.6831 acc=0.8264
+  [epoch 8] step 0/87 loss=0.2511 acc=0.9375
+  [epoch 8] step 20/87 loss=0.8898 acc=0.8304
+  [epoch 8] step 40/87 loss=0.2201 acc=0.8384
+  [epoch 8] step 60/87 loss=0.7932 acc=0.8361
+  [epoch 8] step 80/87 loss=0.2473 acc=0.8449
+      -> Inner EER=13.86% @thr=0.234 (best epoch=8)
+    [Inner 2/2] train_subjects=47 val_subjects=47
+  [epoch 1] step 0/81 loss=13.3150 acc=0.0000
+  [epoch 1] step 20/81 loss=12.0143 acc=0.0000
+  [epoch 1] step 40/81 loss=10.0993 acc=0.0000
+  [epoch 1] step 60/81 loss=10.4905 acc=0.0010
+  [epoch 1] step 80/81 loss=7.9456 acc=0.0039
+  [epoch 2] step 0/81 loss=7.8905 acc=0.0625
+  [epoch 2] step 20/81 loss=8.9246 acc=0.0952
+  [epoch 2] step 40/81 loss=8.4748 acc=0.1006
+  [epoch 2] step 60/81 loss=7.6634 acc=0.1158
+  [epoch 2] step 80/81 loss=5.2050 acc=0.1366
+  [epoch 3] step 0/81 loss=5.3375 acc=0.1250
+  [epoch 3] step 20/81 loss=5.5501 acc=0.3185
+  [epoch 3] step 40/81 loss=2.9571 acc=0.3262
+  [epoch 3] step 60/81 loss=2.0031 acc=0.3678
+  [epoch 3] step 80/81 loss=3.6650 acc=0.4066
+  [epoch 4] step 0/81 loss=3.0320 acc=0.3750
+  [epoch 4] step 20/81 loss=1.7430 acc=0.5446
+  [epoch 4] step 40/81 loss=1.8168 acc=0.5503
+  [epoch 4] step 60/81 loss=2.9143 acc=0.5625
+  [epoch 4] step 80/81 loss=1.5660 acc=0.5640
+  [epoch 5] step 0/81 loss=1.1443 acc=0.6875
+  [epoch 5] step 20/81 loss=0.9836 acc=0.6339
+  [epoch 5] step 40/81 loss=1.2433 acc=0.6723
+  [epoch 5] step 60/81 loss=1.4465 acc=0.6783
+  [epoch 5] step 80/81 loss=1.5840 acc=0.6852
+  [epoch 6] step 0/81 loss=1.1174 acc=0.8125
+  [epoch 6] step 20/81 loss=1.2128 acc=0.7708
+  [epoch 6] step 40/81 loss=0.5689 acc=0.7607
+  [epoch 6] step 60/81 loss=0.9951 acc=0.7520
+  [epoch 6] step 80/81 loss=0.5460 acc=0.7654
+  [epoch 7] step 0/81 loss=1.2283 acc=0.8125
+  [epoch 7] step 20/81 loss=0.9059 acc=0.8452
+  [epoch 7] step 40/81 loss=1.0515 acc=0.8232
+  [epoch 7] step 60/81 loss=1.1734 acc=0.8135
+  [epoch 7] step 80/81 loss=1.2436 acc=0.8040
+  [epoch 8] step 0/81 loss=0.3850 acc=0.8125
+  [epoch 8] step 20/81 loss=1.0620 acc=0.8274
+  [epoch 8] step 40/81 loss=0.6642 acc=0.8140
+  [epoch 8] step 60/81 loss=0.7017 acc=0.8238
+  [epoch 8] step 80/81 loss=0.5965 acc=0.8256
+      -> Inner EER=14.26% @thr=0.234 (best epoch=7)
+  ==> Candidato 2: mean EER=14.06% +/- 0.20% | epoch finale suggerita=8
+
+  >>> BEST OUTER 1: lr=0.0001 freeze_swin=True freeze_mobilenet=False | inner mean EER=12.32%
+
+[OUTER 1] REFIT finale su 94 soggetti per 8 epoche
+  [epoch 1] step 0/168 loss=14.2337 acc=0.0000
+  [epoch 1] step 20/168 loss=13.7074 acc=0.0000
+  [epoch 1] step 40/168 loss=12.9824 acc=0.0000
+  [epoch 1] step 60/168 loss=11.2884 acc=0.0000
+  [epoch 1] step 80/168 loss=10.7139 acc=0.0000
+  [epoch 1] step 100/168 loss=9.9722 acc=0.0000
+  [epoch 1] step 120/168 loss=9.3345 acc=0.0010
+  [epoch 1] step 140/168 loss=10.1646 acc=0.0035
+  [epoch 1] step 160/168 loss=8.3756 acc=0.0078
+Epoch 1/8 - loss=11.1586 acc=0.0108 (2153.0s) lr=9.62e-05
+  [epoch 2] step 0/168 loss=7.6547 acc=0.1875
+  [epoch 2] step 20/168 loss=6.9794 acc=0.1071
+  [epoch 2] step 40/168 loss=5.7758 acc=0.1296
+  [epoch 2] step 60/168 loss=6.7982 acc=0.1352
+  [epoch 2] step 80/168 loss=6.7045 acc=0.1543
+  [epoch 2] step 100/168 loss=5.2168 acc=0.1683
+  [epoch 2] step 120/168 loss=3.8459 acc=0.1865
+  [epoch 2] step 140/168 loss=4.4488 acc=0.2008
+  [epoch 2] step 160/168 loss=6.5302 acc=0.2085
+Epoch 2/8 - loss=5.5648 acc=0.2169 (2131.4s) lr=8.54e-05
+  [epoch 3] step 0/168 loss=3.3218 acc=0.3125
+  [epoch 3] step 20/168 loss=2.9091 acc=0.4345
+  [epoch 3] step 40/168 loss=1.8523 acc=0.4177
+  [epoch 3] step 60/168 loss=2.8860 acc=0.4324
+  [epoch 3] step 80/168 loss=4.3945 acc=0.4468
+  [epoch 3] step 100/168 loss=1.2537 acc=0.4554
+  [epoch 3] step 120/168 loss=1.1852 acc=0.4628
+  [epoch 3] step 140/168 loss=1.2916 acc=0.4712
+  [epoch 3] step 160/168 loss=1.6827 acc=0.4821
+Epoch 3/8 - loss=2.7059 acc=0.4877 (2109.5s) lr=6.91e-05
+  [epoch 4] step 0/168 loss=1.9285 acc=0.5000
+  [epoch 4] step 20/168 loss=2.6333 acc=0.6488
+  [epoch 4] step 40/168 loss=1.6261 acc=0.6311
+  [epoch 4] step 60/168 loss=0.5132 acc=0.6609
+  [epoch 4] step 80/168 loss=3.7406 acc=0.6659
+  [epoch 4] step 100/168 loss=0.9485 acc=0.6708
+  [epoch 4] step 120/168 loss=0.6581 acc=0.6787
+  [epoch 4] step 140/168 loss=1.2676 acc=0.6910
+  [epoch 4] step 160/168 loss=0.5430 acc=0.7007
+Epoch 4/8 - loss=1.3726 acc=0.7024 (2078.4s) lr=5.00e-05
+  [epoch 5] step 0/168 loss=0.9967 acc=0.7500
+  [epoch 5] step 20/168 loss=0.8259 acc=0.7917
+  [epoch 5] step 40/168 loss=0.5708 acc=0.8018
+  [epoch 5] step 60/168 loss=0.6353 acc=0.7992
+  [epoch 5] step 80/168 loss=1.0440 acc=0.8017
+  [epoch 5] step 100/168 loss=0.4392 acc=0.8069
+  [epoch 5] step 120/168 loss=1.4854 acc=0.8063
+  [epoch 5] step 140/168 loss=0.9636 acc=0.8085
+  [epoch 5] step 160/168 loss=0.4040 acc=0.8152
+Epoch 5/8 - loss=0.7578 acc=0.8166 (2081.4s) lr=3.09e-05
+  [epoch 6] step 0/168 loss=0.5656 acc=0.8750
+  [epoch 6] step 20/168 loss=0.8641 acc=0.8780
+  [epoch 6] step 40/168 loss=0.3516 acc=0.8765
+  [epoch 6] step 60/168 loss=0.2925 acc=0.8781
+  [epoch 6] step 80/168 loss=0.2967 acc=0.8758
+  [epoch 6] step 100/168 loss=0.0829 acc=0.8744
+  [epoch 6] step 120/168 loss=0.4549 acc=0.8729
+  [epoch 6] step 140/168 loss=0.3454 acc=0.8763
+  [epoch 6] step 160/168 loss=0.2777 acc=0.8785
+Epoch 6/8 - loss=0.4726 acc=0.8791 (2094.4s) lr=1.46e-05
+  [epoch 7] step 0/168 loss=1.0759 acc=0.6875
+  [epoch 7] step 20/168 loss=0.4995 acc=0.8899
+  [epoch 7] step 40/168 loss=0.0693 acc=0.8887
+  [epoch 7] step 60/168 loss=0.8878 acc=0.8904
+  [epoch 7] step 80/168 loss=1.6080 acc=0.8912
+  [epoch 7] step 100/168 loss=0.2545 acc=0.8954
+  [epoch 7] step 120/168 loss=0.0303 acc=0.9013
+  [epoch 7] step 140/168 loss=0.3716 acc=0.9038
+  [epoch 7] step 160/168 loss=0.0785 acc=0.9061
+Epoch 7/8 - loss=0.3603 acc=0.9048 (2090.6s) lr=3.81e-06
+  [epoch 8] step 0/168 loss=0.0650 acc=1.0000
+  [epoch 8] step 20/168 loss=0.0791 acc=0.9464
+  [epoch 8] step 40/168 loss=0.3411 acc=0.9360
+  [epoch 8] step 60/168 loss=0.1147 acc=0.9334
+  [epoch 8] step 80/168 loss=0.1771 acc=0.9406
+  [epoch 8] step 100/168 loss=1.0065 acc=0.9350
+  [epoch 8] step 120/168 loss=0.2770 acc=0.9370
+  [epoch 8] step 140/168 loss=0.8378 acc=0.9362
+  [epoch 8] step 160/168 loss=0.2448 acc=0.9359
+Epoch 8/8 - loss=0.2575 acc=0.9349 (2087.0s) lr=0.00e+00
+
+[OUTER 1] FINAL TEST (mai usato nell'inner CV): EER=9.18% @thr=0.279
+
+########################################################################
+OUTER FOLD 2/2 | train+inner=95 | final test=94
+########################################################################
+
+[OUTER 2] INNER MODEL SELECTION
+  Soggetti disponibili per inner CV: 95 | candidati: 2
+
+  Candidato 1/2: lr=0.0001 freeze_swin=True freeze_mobilenet=False
+    [Inner 1/2] train_subjects=47 val_subjects=48
+  [epoch 1] step 0/74 loss=14.3206 acc=0.0000
+  [epoch 1] step 20/74 loss=12.3867 acc=0.0000
+  [epoch 1] step 40/74 loss=11.3932 acc=0.0000
+  [epoch 1] step 60/74 loss=8.7333 acc=0.0031
+  [epoch 2] step 0/74 loss=9.4116 acc=0.0625
+  [epoch 2] step 20/74 loss=7.5957 acc=0.0655
+  [epoch 2] step 40/74 loss=6.0605 acc=0.1174
+  [epoch 2] step 60/74 loss=5.7318 acc=0.1322
+  [epoch 3] step 0/74 loss=2.2109 acc=0.5625
+  [epoch 3] step 20/74 loss=3.3223 acc=0.3571
+  [epoch 3] step 40/74 loss=3.1526 acc=0.4040
+  [epoch 3] step 60/74 loss=2.0302 acc=0.4191
+  [epoch 4] step 0/74 loss=1.2360 acc=0.6250
+  [epoch 4] step 20/74 loss=2.9918 acc=0.6458
+  [epoch 4] step 40/74 loss=1.1551 acc=0.6555
+  [epoch 4] step 60/74 loss=1.4458 acc=0.6701
+  [epoch 5] step 0/74 loss=0.2694 acc=0.9375
+  [epoch 5] step 20/74 loss=0.2457 acc=0.7917
+  [epoch 5] step 40/74 loss=0.3384 acc=0.8201
+  [epoch 5] step 60/74 loss=1.4865 acc=0.8166
+  [epoch 6] step 0/74 loss=0.5842 acc=0.8750
+  [epoch 6] step 20/74 loss=0.2410 acc=0.8423
+  [epoch 6] step 40/74 loss=0.1218 acc=0.8704
+  [epoch 6] step 60/74 loss=0.9087 acc=0.8668
+  [epoch 7] step 0/74 loss=0.3296 acc=0.9375
+  [epoch 7] step 20/74 loss=0.1239 acc=0.9107
+  [epoch 7] step 40/74 loss=0.2184 acc=0.9223
+  [epoch 7] step 60/74 loss=0.4277 acc=0.9160
+  [epoch 8] step 0/74 loss=0.0841 acc=1.0000
+  [epoch 8] step 20/74 loss=0.1018 acc=0.9256
+  [epoch 8] step 40/74 loss=0.2116 acc=0.9162
+  [epoch 8] step 60/74 loss=0.3870 acc=0.9221
+      -> Inner EER=7.92% @thr=0.319 (best epoch=8)
+    [Inner 2/2] train_subjects=48 val_subjects=47
+  [epoch 1] step 0/65 loss=13.9564 acc=0.0000
+  [epoch 1] step 20/65 loss=11.7144 acc=0.0000
+  [epoch 1] step 40/65 loss=11.0016 acc=0.0000
+  [epoch 1] step 60/65 loss=8.8529 acc=0.0000
+  [epoch 2] step 0/65 loss=9.9110 acc=0.0000
+  [epoch 2] step 20/65 loss=8.6182 acc=0.0357
+  [epoch 2] step 40/65 loss=7.0646 acc=0.0564
+  [epoch 2] step 60/65 loss=3.6917 acc=0.0902
+  [epoch 3] step 0/65 loss=3.6487 acc=0.3125
+  [epoch 3] step 20/65 loss=4.5014 acc=0.3512
+  [epoch 3] step 40/65 loss=4.8101 acc=0.3430
+  [epoch 3] step 60/65 loss=2.8395 acc=0.3678
+  [epoch 4] step 0/65 loss=1.8027 acc=0.6250
+  [epoch 4] step 20/65 loss=1.4644 acc=0.5655
+  [epoch 4] step 40/65 loss=1.7702 acc=0.5899
+  [epoch 4] step 60/65 loss=2.4164 acc=0.5840
+  [epoch 5] step 0/65 loss=1.2046 acc=0.5000
+  [epoch 5] step 20/65 loss=1.9291 acc=0.7321
+  [epoch 5] step 40/65 loss=0.3402 acc=0.7470
+  [epoch 5] step 60/65 loss=0.6019 acc=0.7654
+  [epoch 6] step 0/65 loss=0.8410 acc=0.8125
+  [epoch 6] step 20/65 loss=0.6426 acc=0.8274
+  [epoch 6] step 40/65 loss=0.3181 acc=0.8216
+  [epoch 6] step 60/65 loss=0.6566 acc=0.8350
+  [epoch 7] step 0/65 loss=0.4090 acc=0.8750
+  [epoch 7] step 20/65 loss=0.0477 acc=0.8690
+  [epoch 7] step 40/65 loss=1.0510 acc=0.8826
+  [epoch 7] step 60/65 loss=0.7188 acc=0.8883
+  [epoch 8] step 0/65 loss=0.3224 acc=0.8750
+  [epoch 8] step 20/65 loss=0.0351 acc=0.8929
+  [epoch 8] step 40/65 loss=0.5102 acc=0.8948
+  [epoch 8] step 60/65 loss=0.7218 acc=0.9047
+      -> Inner EER=15.57% @thr=0.230 (best epoch=8)
+  ==> Candidato 1: mean EER=11.75% +/- 3.82% | epoch finale suggerita=8
+
+  Candidato 2/2: lr=0.0001 freeze_swin=True freeze_mobilenet=True
+    [Inner 1/2] train_subjects=47 val_subjects=48
+  [epoch 1] step 0/63 loss=14.4669 acc=0.0000
+  [epoch 1] step 20/63 loss=11.7513 acc=0.0000
+  [epoch 1] step 40/63 loss=10.1168 acc=0.0000
+  [epoch 1] step 60/63 loss=11.1611 acc=0.0061
+  [epoch 2] step 0/63 loss=8.7626 acc=0.0625
+  [epoch 2] step 20/63 loss=7.8575 acc=0.0417
+  [epoch 2] step 40/63 loss=6.1252 acc=0.0671
+  [epoch 2] step 60/63 loss=5.2845 acc=0.0973
+  [epoch 3] step 0/63 loss=4.8787 acc=0.3125
+  [epoch 3] step 20/63 loss=6.6106 acc=0.1964
+  [epoch 3] step 40/63 loss=4.1342 acc=0.2317
+  [epoch 3] step 60/63 loss=3.5418 acc=0.2695
+  [epoch 4] step 0/63 loss=3.8605 acc=0.3750
+  [epoch 4] step 20/63 loss=4.1003 acc=0.3958
+  [epoch 4] step 40/63 loss=1.9174 acc=0.4085
+  [epoch 4] step 60/63 loss=3.2541 acc=0.4426
+  [epoch 5] step 0/63 loss=2.7573 acc=0.4375
+  [epoch 5] step 20/63 loss=1.9751 acc=0.5804
+  [epoch 5] step 40/63 loss=1.2365 acc=0.5838
+  [epoch 5] step 60/63 loss=1.4912 acc=0.5830
+  [epoch 6] step 0/63 loss=0.8011 acc=0.6875
+  [epoch 6] step 20/63 loss=2.3579 acc=0.6548
+  [epoch 6] step 40/63 loss=1.7497 acc=0.6585
+  [epoch 6] step 60/63 loss=1.6253 acc=0.6773
+  [epoch 7] step 0/63 loss=1.5273 acc=0.6875
+  [epoch 7] step 20/63 loss=2.9144 acc=0.6935
+  [epoch 7] step 40/63 loss=0.6200 acc=0.7149
+  [epoch 7] step 60/63 loss=0.5546 acc=0.7008
+  [epoch 8] step 0/63 loss=1.1913 acc=0.6875
+  [epoch 8] step 20/63 loss=1.3920 acc=0.6935
+  [epoch 8] step 40/63 loss=1.7412 acc=0.7165
+  [epoch 8] step 60/63 loss=0.6159 acc=0.7316
+      -> Inner EER=15.87% @thr=0.246 (best epoch=8)
+    [Inner 2/2] train_subjects=48 val_subjects=47
+  [epoch 1] step 0/76 loss=14.7115 acc=0.0000
+  [epoch 1] step 20/76 loss=12.0866 acc=0.0000
+  [epoch 1] step 40/76 loss=10.5819 acc=0.0000
+  [epoch 1] step 60/76 loss=11.8769 acc=0.0000
+  [epoch 2] step 0/76 loss=9.7088 acc=0.0000
+  [epoch 2] step 20/76 loss=8.4899 acc=0.0446
+  [epoch 2] step 40/76 loss=6.1516 acc=0.0610
+  [epoch 2] step 60/76 loss=5.8567 acc=0.0891
+  [epoch 3] step 0/76 loss=5.3984 acc=0.1875
+  [epoch 3] step 20/76 loss=5.0742 acc=0.2351
+  [epoch 3] step 40/76 loss=3.9801 acc=0.2759
+  [epoch 3] step 60/76 loss=2.7688 acc=0.2910
+  [epoch 4] step 0/76 loss=2.8767 acc=0.3125
+  [epoch 4] step 20/76 loss=1.9093 acc=0.4524
+  [epoch 4] step 40/76 loss=2.4410 acc=0.4741
+  [epoch 4] step 60/76 loss=3.4373 acc=0.4682
+  [epoch 5] step 0/76 loss=2.4649 acc=0.6875
+  [epoch 5] step 20/76 loss=1.4855 acc=0.5804
+  [epoch 5] step 40/76 loss=1.2190 acc=0.5747
+  [epoch 5] step 60/76 loss=1.4780 acc=0.5871
+  [epoch 6] step 0/76 loss=3.2426 acc=0.5000
+  [epoch 6] step 20/76 loss=1.5133 acc=0.6518
+  [epoch 6] step 40/76 loss=1.1122 acc=0.6662
+  [epoch 6] step 60/76 loss=1.8218 acc=0.6619
+  [epoch 7] step 0/76 loss=1.3688 acc=0.7500
+  [epoch 7] step 20/76 loss=0.8570 acc=0.7619
+  [epoch 7] step 40/76 loss=1.4169 acc=0.7470
+  [epoch 7] step 60/76 loss=1.7515 acc=0.7295
+  [epoch 8] step 0/76 loss=0.7191 acc=0.8750
+  [epoch 8] step 20/76 loss=1.2108 acc=0.7589
+  [epoch 8] step 40/76 loss=1.4496 acc=0.7439
+  [epoch 8] step 60/76 loss=1.2789 acc=0.7510
+      -> Inner EER=14.54% @thr=0.255 (best epoch=8)
+  ==> Candidato 2: mean EER=15.20% +/- 0.67% | epoch finale suggerita=8
+
+  >>> BEST OUTER 2: lr=0.0001 freeze_swin=True freeze_mobilenet=False | inner mean EER=11.75%
+
+[OUTER 2] REFIT finale su 95 soggetti per 8 epoche
+  [epoch 1] step 0/140 loss=14.5150 acc=0.0000
+  [epoch 1] step 20/140 loss=13.4429 acc=0.0000
+  [epoch 1] step 40/140 loss=12.5156 acc=0.0000
+  [epoch 1] step 60/140 loss=12.4428 acc=0.0000
+  [epoch 1] step 80/140 loss=12.4202 acc=0.0000
+  [epoch 1] step 100/140 loss=9.6549 acc=0.0000
+  [epoch 1] step 120/140 loss=8.7508 acc=0.0021
+Epoch 1/8 - loss=11.6361 acc=0.0045 (1759.6s) lr=9.62e-05
+  [epoch 2] step 0/140 loss=9.3573 acc=0.0000
+  [epoch 2] step 20/140 loss=8.3356 acc=0.0446
+  [epoch 2] step 40/140 loss=7.5089 acc=0.0564
+  [epoch 2] step 60/140 loss=5.4356 acc=0.0697
+  [epoch 2] step 80/140 loss=6.7578 acc=0.0849
+  [epoch 2] step 100/140 loss=6.5617 acc=0.1058
+  [epoch 2] step 120/140 loss=2.9803 acc=0.1250
+Epoch 2/8 - loss=6.5977 acc=0.1415 (1776.0s) lr=8.54e-05
+  [epoch 3] step 0/140 loss=3.8755 acc=0.5000
+  [epoch 3] step 20/140 loss=4.1215 acc=0.3244
+  [epoch 3] step 40/140 loss=4.5573 acc=0.3369
+  [epoch 3] step 60/140 loss=4.2777 acc=0.3576
+  [epoch 3] step 80/140 loss=4.3949 acc=0.3634
+  [epoch 3] step 100/140 loss=4.5752 acc=0.3769
+  [epoch 3] step 120/140 loss=2.9190 acc=0.3905
+Epoch 3/8 - loss=3.3991 acc=0.4004 (1753.9s) lr=6.91e-05
+  [epoch 4] step 0/140 loss=1.7656 acc=0.5625
+  [epoch 4] step 20/140 loss=0.9155 acc=0.5536
+  [epoch 4] step 40/140 loss=1.6204 acc=0.5808
+  [epoch 4] step 60/140 loss=3.2717 acc=0.5799
+  [epoch 4] step 80/140 loss=2.2970 acc=0.5787
+  [epoch 4] step 100/140 loss=2.0294 acc=0.5879
+  [epoch 4] step 120/140 loss=2.4120 acc=0.6064
+Epoch 4/8 - loss=1.8519 acc=0.6116 (1754.8s) lr=5.00e-05
+  [epoch 5] step 0/140 loss=1.0932 acc=0.6875
+  [epoch 5] step 20/140 loss=1.0845 acc=0.7202
+  [epoch 5] step 40/140 loss=2.2787 acc=0.7210
+  [epoch 5] step 60/140 loss=0.5575 acc=0.7275
+  [epoch 5] step 80/140 loss=0.4071 acc=0.7245
+  [epoch 5] step 100/140 loss=0.6151 acc=0.7333
+  [epoch 5] step 120/140 loss=1.5984 acc=0.7345
+Epoch 5/8 - loss=1.1068 acc=0.7415 (1768.5s) lr=3.09e-05
+  [epoch 6] step 0/140 loss=2.1531 acc=0.6250
+  [epoch 6] step 20/140 loss=0.9496 acc=0.7857
+  [epoch 6] step 40/140 loss=1.2561 acc=0.7927
+  [epoch 6] step 60/140 loss=0.3343 acc=0.7941
+  [epoch 6] step 80/140 loss=1.2626 acc=0.7978
+  [epoch 6] step 100/140 loss=1.5955 acc=0.8075
+  [epoch 6] step 120/140 loss=0.3145 acc=0.8156
+Epoch 6/8 - loss=0.7121 acc=0.8187 (1765.0s) lr=1.46e-05
+  [epoch 7] step 0/140 loss=0.7775 acc=0.7500
+  [epoch 7] step 20/140 loss=0.4371 acc=0.8780
+  [epoch 7] step 40/140 loss=0.2360 acc=0.8720
+  [epoch 7] step 60/140 loss=0.4224 acc=0.8637
+  [epoch 7] step 80/140 loss=0.2504 acc=0.8596
+  [epoch 7] step 100/140 loss=0.7652 acc=0.8540
+  [epoch 7] step 120/140 loss=0.1820 acc=0.8559
+Epoch 7/8 - loss=0.5327 acc=0.8562 (1774.9s) lr=3.81e-06
+  [epoch 8] step 0/140 loss=0.6904 acc=0.8125
+  [epoch 8] step 20/140 loss=0.3072 acc=0.8839
+  [epoch 8] step 40/140 loss=0.5290 acc=0.8811
+  [epoch 8] step 60/140 loss=0.7121 acc=0.8811
+  [epoch 8] step 80/140 loss=0.1316 acc=0.8796
+  [epoch 8] step 100/140 loss=0.3373 acc=0.8818
+  [epoch 8] step 120/140 loss=0.6789 acc=0.8827
+Epoch 8/8 - loss=0.4147 acc=0.8839 (1756.2s) lr=0.00e+00
+
+[OUTER 2] FINAL TEST (mai usato nell'inner CV): EER=9.32% @thr=0.275
+
+========================================================================
+RISULTATO FINALE NESTED K-FOLD
+========================================================================
+Outer-test EER medio: 9.25% +/- 0.07%
+Min EER: 9.18% | Max EER: 9.32%
+Threshold EER medio (solo descrittivo): 0.277
+Summary JSON: models_final_dorsal\nested_cv\nested_cv_summary.json
