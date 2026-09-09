@@ -36,13 +36,37 @@ RIASSUNTO:
 6 Fusione finale 
 
 
+TODO: !!!!
+1- Eseguire il Verify per il dorso  
+2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
+2- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
+     !!! Per la tesi userei assolutamente la versione calibrate_cv, non una calibrazione fatta indiscriminatamente su tutto il dataset !!!
+
+3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
+     - sulle singole componenti del palmar:
+          - valutare efficacia di full: DINO + Central ROI  + FRIT (Quello già fatto nel nested?)
+          - valutare efficacia di Central ROI + FRIT
+          - valutare efficacia di DINO + FRIT
+          - valutare efficacia di DINO + Central ROI
+     - sulle singole componenti del dorsal:
+          - valutare efficacia di Swin
+          - valutare efficacia di Swin + CLAHE
+          - valutare efficacia di Swin + CLAHE + Frangi (Quello già fatto nel nested?) e confrontare il loro EER
+
+4- Fare una serie di test di gruppo, non singoli su un dataset differente da quello usato per il nested e training (come già fatto per palmar sotto) da riportare in tesi 
+5- Fare una sorta di nested cv sulla pipeline multimodale completa, prendendo direttamente gli embedding prodotti dai due stream e analizzare la loro fusione:
+     - confrontando i risultati ottenuti dai due stream per i singoli elementi analizzati (o in media)
+     - confrontare i risultati ottenuti dai due singoli stream con la loro fusione
+
+
 
 Comandi esecuzione: 
+
+LANCIATO COMANDO PER TRAINING ALLE 00:32 DEL 10/09: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
 
 
 DA ESEGUIRE:
 
-COMANDO PER TRAINING: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
 POI PROVARE IL VERIFY
 
 
