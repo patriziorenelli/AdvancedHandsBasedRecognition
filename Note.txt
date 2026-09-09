@@ -36,31 +36,12 @@ RIASSUNTO:
 6 Fusione finale 
 
 
-Per capire la bontà dell'architettura e raccogliere dati per la tesi:
-Bisognerebbe fare prima fare K-fold dividendo i soggetti (e le relative immagini) in training e test
-Poi  fare k-fold sui 152 soggetti usando un 5-fold cross validation
 
-Forse servirebbe fare nested k-fold visto che si usa 11k hands come dataset e sono solo 190 soggetti.
-
-Per ottimizzare i tempi del training però se si usa nested k-fold:
-1. Pre-processing del dataset 1 volta per tutte le immagini, individuando anche le roi del palmo e delle nocche (conviene salvare sia le coordinate che i ritagli dei ROI palmo e nocche in modo da evitare di evocare MediaPipe)
-2. Passare il dataset pre-processato solo 1 volta a DINOv2 E Swin-Tiny e salvare localmente i vettori delle caratteristiche in modo che MLP lavora sui vettori e non le immagini
-3. Durante i 20 fold addestrare unicamente MobileNetV3-Large e i layer di fusione MLP 
-
-RIVEDERE:
-- Che cos'erano: canali FRIT (ridgelet) handcrafted C'E' RISPOSTA SU CHAT CON CLAUDE
-- Aggiungere data augmentation dinamica durante la fase di training usando le immagini allineate 
-
-
-          
 Comandi esecuzione: 
 
 
 DA ESEGUIRE:
 
-STO ESEGUENDO IL NESTED STIMATI 70 ORE INIZIATO IL 7/09 ALLE 2:00
-
-COMANDO PER NESTED: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
 COMANDO PER TRAINING: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
 POI PROVARE IL VERIFY
 
@@ -74,12 +55,21 @@ python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_
 python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
 
 ----
-ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO 
+ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO DA USARE IN TESI PER DESCRIVERE LA POSSIBILITA' DI CACHE
  python precompute_knuckle_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\knuckle_cache.npz" --batch_size 16
  python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 2 --inner_folds 2 --inner_epochs 8 --outer_epochs 8 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
 ----
 
 
+COMANDO PER NESTED: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+========================================================================
+RISULTATO FINALE NESTED K-FOLD
+========================================================================
+Outer-test EER medio: 8.19% +/- 1.28%
+Min EER: 6.50% | Max EER: 9.59%
+Threshold EER medio (solo descrittivo): 0.287
+Summary JSON: models_final_dorsal\nested_cv\nested_cv_summary.json
+Run log: models_final_dorsal\logs\nested_cv_20260907_020321_8924be.jsonl
 
 
 

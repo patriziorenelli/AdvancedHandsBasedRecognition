@@ -6,3 +6,9 @@ palm_train_and_log/palm_embedding_final.pt
 models_final/palm_embedding_final.pt
 log_first_dorsal_nested_run/nested_cv/dorsal_outer_fold_01.pt
 log_first_dorsal_nested_run/nested_cv/dorsal_outer_fold_02.pt
+models_final_dorsal/nested_cv/dorsal_outer_fold_01.pt
+models_final_dorsal/nested_cv/dorsal_outer_fold_02.pt
+models_final_dorsal/nested_cv/dorsal_outer_fold_03.pt
+log_final_dorsal_nested_run/nested_cv/dorsal_outer_fold_01.pt
+log_final_dorsal_nested_run/nested_cv/dorsal_outer_fold_02.pt
+log_final_dorsal_nested_run/nested_cv/dorsal_outer_fold_03.pt
