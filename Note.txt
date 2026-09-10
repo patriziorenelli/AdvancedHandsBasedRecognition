@@ -30,7 +30,6 @@ RIASSUNTO:
 3 Stream Dorso:  Per forma (e per le vene se possibile): Swin-Tiny bloccato, sfruttando dei filtri per aumentare il contrasto e far risaltare i vasi sanguigni
                  Per ROI nocche: MobileNetV3-Large analizza i ritagli delle nocche ricavati tramite MediaPipe
                  
-
 4 Fusione Stream Palmo
 5 Fusione Stream Dorso
 6 Fusione finale 
@@ -62,8 +61,7 @@ TODO: !!!!
 
 Comandi esecuzione: 
 
-LANCIATO COMANDO PER TRAINING ALLE 00:32 DEL 10/09: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
-
+LANCIATO COMANDO PER TRAINING ALLE 00:32 DEL 10/09: 
 
 DA ESEGUIRE:
 
@@ -75,7 +73,7 @@ POI PROVARE IL VERIFY
 eseguito: 
 python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --batch_size 16
 python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --batch_size 16
-python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
+NESTED PALMO: python palm_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 python palm_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
 
 ----
@@ -85,7 +83,7 @@ ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO DA USARE IN TE
 ----
 
 
-COMANDO PER NESTED: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+NESTED DORSO: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
 ========================================================================
 RISULTATO FINALE NESTED K-FOLD
 ========================================================================
@@ -95,7 +93,12 @@ Threshold EER medio (solo descrittivo): 0.287
 Summary JSON: models_final_dorsal\nested_cv\nested_cv_summary.json
 Run log: models_final_dorsal\logs\nested_cv_20260907_020321_8924be.jsonl
 
+Palmo training: python dorsal_run.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
+Epoch 16/20 - loss=0.0184 acc=0.9959 (3375.7s) lr=9.55e-06 | eval EER=3.09% @thr=0.359
+  [early stopping] nessun miglioramento EER da 5 epoche (best epoch=11, best EER=3.05%). Interrompo a epoca 16/20.
 
+Training completato. Modello finale: models_final_dorsal\dorsal_embedding_final.pt
+EER validation open-set: 3.05% @thr=0.359
 
 
 Per verificare 2 immagini: 
@@ -116,8 +119,6 @@ Risultati preprocessing:
      - Bounding box mano troppo piccola (0.0025): 1
      ERRORS: 0
 
-ON WORKING:
-Training palmo eseguendo palm_run 
 
 
 ----------------------------------------
