@@ -36,6 +36,7 @@ RIASSUNTO:
 
 
 TODO: !!!!
+0- Capire nomenclatura immagini presenti in Tesi>test_image>Sample dataset 2
 1- Eseguire il Verify per il dorso  
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 2- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
