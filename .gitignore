@@ -14,3 +14,4 @@ log_final_dorsal_nested_run/nested_cv/dorsal_outer_fold_02.pt
 log_final_dorsal_nested_run/nested_cv/dorsal_outer_fold_03.pt
 dorsal_train_and_log/dorsal_embedding_final.pt
 models_final_dorsal/dorsal_embedding_final.pt
+models_final/dorsal_embedding_final.pt
