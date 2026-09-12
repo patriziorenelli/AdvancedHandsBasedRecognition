@@ -37,12 +37,10 @@ RIASSUNTO:
 
 TODO: !!!!
 0- Capire nomenclatura immagini presenti in Tesi>test_image>Sample dataset 2
-1- Eseguire il Verify per il dorso  
-2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 2- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
      !!! Per la tesi userei assolutamente la versione calibrate_cv, non una calibrazione fatta indiscriminatamente su tutto il dataset !!!
-
-3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
+3- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
+4- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
      - sulle singole componenti del palmar:
           - valutare efficacia di full: DINO + Central ROI  + FRIT (Quello già fatto nel nested?)
           - valutare efficacia di Central ROI + FRIT
@@ -53,8 +51,8 @@ TODO: !!!!
           - valutare efficacia di Swin + CLAHE
           - valutare efficacia di Swin + CLAHE + Frangi (Quello già fatto nel nested?) e confrontare il loro EER
 
-4- Fare una serie di test di gruppo, non singoli su un dataset differente da quello usato per il nested e training (come già fatto per palmar sotto) da riportare in tesi 
-5- Fare una sorta di nested cv sulla pipeline multimodale completa, prendendo direttamente gli embedding prodotti dai due stream e analizzare la loro fusione:
+5- Fare una serie di test di gruppo, non singoli su un dataset differente da quello usato per il nested e training (come già fatto per palmar sotto) da riportare in tesi 
+6- Fare una sorta di nested cv sulla pipeline multimodale completa, prendendo direttamente gli embedding prodotti dai due stream e analizzare la loro fusione:
      - confrontando i risultati ottenuti dai due stream per i singoli elementi analizzati (o in media)
      - confrontare i risultati ottenuti dai due singoli stream con la loro fusione
 
@@ -103,12 +101,19 @@ EER validation open-set: 3.05% @thr=0.359
 
 
 Per verificare 2 immagini: 
-comando: python palm_run.py verify --checkpoint "models_final\palm_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-2.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-1.jpg" --hand_side1 left --hand_side2 left
+comando per palmo: python palm_run.py verify --checkpoint "models_final\palm_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-2.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample dataset 2\S1-P3-F-42-1.jpg" --hand_side1 left --hand_side2 left
 Usate immagini da un nuovo dataset https://www.mutah.edu.jo/biometrix/hand-images-databases.aspx in modo da non utilizzare le stesse usate per il training e test 
 Test effettuati di verifica di 2 immagini che vengono pre-processate e verificate:
      - 2 immagini uguali "similarity": 1.0000001192092896, "threshold": 0.55
      - 2 immagini di 2 soggetti differenti "similarity": similarity=0.4016, soglia=0.5500
      - 2 immagini differenti dello stesso soggetto similarity=0.9203, soglia=0.550
+
+comando per dorso: python dorsal_run.py verify --checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --raw1 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample NIH - tutto\P024\P24_L_dorsal_RGB.jpg" --raw2 "D:\Users\Patrizio\Desktop\Tesi\test_image\Sample NIH - tutto\P024\P24_L_dorsal_RGB_modify.jpg" --hand_side1 dorsal_left --hand_side2 dorsal_left
+Usate immagini da un nuovo dataset https://datasetcatalog.nlm.nih.gov/dataset?q=0003216121 in modo da non utilizzare le stesse usate per il training e test 
+Test effettuati di verifica di 2 immagini che vengono pre-processate e verificate:
+     - 2 immagini uguali  STESSO SOGGETTO  (similarity=1.0000, soglia=0.5500) P24_L_dorsal_RGB_modify.jpg   -----------  STESSO SOGGETTO  (similarity=1.0000, soglia=0.5500) P114_L_dorsal_RGB.jpg 
+     - 2 immagini di 2 soggetti differenti P114_L_dorsal_RGB.jpg e P24_L_dorsal_RGB.jpg SOGGETTI DIVERSI  (similarity=-0.0661, soglia=0.5500)
+     - 2 immagini differenti dello stesso soggetto: STESSO SOGGETTO  (similarity=0.9025, soglia=0.5500) P24_L_dorsal_RGB_2.jpg e P24_L_dorsal_RGB_modify.jpg   --------- STESSO SOGGETTO  (similarity=0.9310, soglia=0.5500) P114_L_dorsal_RGB.jpg e P114_L_dorsal_RGB_modify.jpg
 
 
 !!! DATASET COMPLETAMENTE PRE-PROCESSATO !!!
