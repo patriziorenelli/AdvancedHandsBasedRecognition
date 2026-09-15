@@ -32,15 +32,15 @@ RIASSUNTO:
                  
 4 Fusione Stream Palmo
 5 Fusione Stream Dorso
-6 Fusione finale 
+6 Fusione finale
 
 
 TODO: !!!!
 0- Capire nomenclatura immagini presenti in Tesi>test_image>Sample dataset 2
-2- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
+1- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
      !!! Per la tesi userei assolutamente la versione calibrate_cv, non una calibrazione fatta indiscriminatamente su tutto il dataset !!!
-3- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
-4- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
+2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
+3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
      - sulle singole componenti del palmar:
           - valutare efficacia di full: DINO + Central ROI  + FRIT (Quello già fatto nel nested?)
           - valutare efficacia di Central ROI + FRIT
@@ -51,8 +51,8 @@ TODO: !!!!
           - valutare efficacia di Swin + CLAHE
           - valutare efficacia di Swin + CLAHE + Frangi (Quello già fatto nel nested?) e confrontare il loro EER
 
-5- Fare una serie di test di gruppo, non singoli su un dataset differente da quello usato per il nested e training (come già fatto per palmar sotto) da riportare in tesi 
-6- Fare una sorta di nested cv sulla pipeline multimodale completa, prendendo direttamente gli embedding prodotti dai due stream e analizzare la loro fusione:
+4- Fare una serie di test di gruppo, non singoli su un dataset differente da quello usato per il nested e training (come già fatto per palmar sotto) da riportare in tesi 
+5- Fare una sorta di nested cv sulla pipeline multimodale completa, prendendo direttamente gli embedding prodotti dai due stream e analizzare la loro fusione:
      - confrontando i risultati ottenuti dai due stream per i singoli elementi analizzati (o in media)
      - confrontare i risultati ottenuti dai due singoli stream con la loro fusione
 
@@ -60,12 +60,7 @@ TODO: !!!!
 
 Comandi esecuzione: 
 
-LANCIATO COMANDO PER TRAINING ALLE 00:32 DEL 10/09: 
-
-DA ESEGUIRE:
-
-POI PROVARE IL VERIFY
-
+Possibile che il palmar non abbia salvato i checkpoint?
 
 
 ----------------------------------------
@@ -80,6 +75,7 @@ ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO DA USARE IN TE
  python precompute_knuckle_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\knuckle_cache.npz" --batch_size 16
  python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 2 --inner_folds 2 --inner_epochs 8 --outer_epochs 8 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
 ----
+
 
 
 NESTED DORSO: python dorsal_run.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
@@ -98,6 +94,10 @@ Epoch 16/20 - loss=0.0184 acc=0.9959 (3375.7s) lr=9.55e-06 | eval EER=3.09% @thr
 
 Training completato. Modello finale: models_final_dorsal\dorsal_embedding_final.pt
 EER validation open-set: 3.05% @thr=0.359
+
+Per valutare accuracy nested palmo: python evaluate_rank1.py --stream palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint_dir log_nested_cv_palm --mode nested_cv --output_json results_palm_rank1.json
+Per valutare accuracy nested dorso: python evaluate_rank1.py --stream dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint_dir log_final_dorsal_nested_run/nested_cv --mode nested_cv --output_json results_dorsal_rank1.json
+
 
 
 Per verificare 2 immagini: 
