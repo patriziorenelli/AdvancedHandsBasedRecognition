@@ -95,9 +95,12 @@ Epoch 16/20 - loss=0.0184 acc=0.9959 (3375.7s) lr=9.55e-06 | eval EER=3.09% @thr
 Training completato. Modello finale: models_final_dorsal\dorsal_embedding_final.pt
 EER validation open-set: 3.05% @thr=0.359
 
- !!! DA RILANCIARE IL PALMO EVALUATION USANDO LA CACHE --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" CON PERO' IL PARAMETRO --embed_cache_path !!!!!
 Per valutare accuracy nested palmo: python evaluate_rank1.py --stream palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint_dir log_nested_cv_palm --embed_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --mode nested_cv --output_json results_palm_rank1_with_vit_Cache.json
 Per valutare accuracy nested dorso: python evaluate_rank1.py --stream dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint_dir log_final_dorsal_nested_run/nested_cv --mode nested_cv --output_json results_dorsal_rank1.json --embed_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --num_workers 1 --batch_size 16
+
+Per valutare accuracy modelli finali usati nelle pipeline:
+Per dorso: python evaluate_rank1_final_model.py --stream dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint models_final_dorsal\dorsal_embedding_final.pt --mode single --embed_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --num_workers 1 --batch_size 16 --output_json results_dorsal_final_rank1.json
+Per palmo: python evaluate_rank1_final_model.py --stream palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --checkpoint models_final\palm_embedding_final.pt --mode single --embed_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --num_workers 1 --batch_size 16 --output_json results_palmar_final_rank1.json
 
 
 Per verificare 2 immagini: 

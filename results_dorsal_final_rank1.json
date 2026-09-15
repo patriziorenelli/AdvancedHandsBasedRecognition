@@ -1,0 +1,25 @@
+[
+  {
+    "checkpoint": "models_final_dorsal\\dorsal_embedding_final.pt",
+    "outer_fold": null,
+    "n_test_subjects": 24,
+    "n_test_samples": 576,
+    "eer_recomputed": {
+      "eer": 0.03051110580367805,
+      "eer_threshold": 0.3587174348697393,
+      "n_genuine": 8374,
+      "n_impostor": 8374
+    },
+    "eer_saved_in_checkpoint": 0.03051110580367805,
+    "verification_accuracy": {
+      "verification_accuracy": 0.970503940769047,
+      "best_threshold": 0.3707414829659317,
+      "n_genuine": 8374,
+      "n_impostor": 8374
+    },
+    "rank-1": 0.9982638888888888,
+    "rank-5": 1.0,
+    "n_valid_probes": 576,
+    "n_total_samples": 576
+  }
+]
