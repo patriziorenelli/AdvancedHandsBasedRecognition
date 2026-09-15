@@ -1,0 +1,108 @@
+{
+  "folds": [
+    {
+      "checkpoint": "log_nested_cv_palm\\palm_outer_fold_01.pt",
+      "outer_fold": 1,
+      "n_test_subjects": 42,
+      "n_test_samples": 1040,
+      "eer_recomputed": {
+        "eer": 0.10485,
+        "eer_threshold": 0.2344689378757514,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.10485,
+      "verification_accuracy": {
+        "verification_accuracy": 0.8953,
+        "best_threshold": 0.25450901803607207,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9875,
+      "rank-5": 0.9942307692307693,
+      "n_valid_probes": 1040,
+      "n_total_samples": 1040
+    },
+    {
+      "checkpoint": "log_nested_cv_palm\\palm_outer_fold_02.pt",
+      "outer_fold": 2,
+      "n_test_subjects": 39,
+      "n_test_samples": 1161,
+      "eer_recomputed": {
+        "eer": 0.1057,
+        "eer_threshold": 0.2464929859719438,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.1057,
+      "verification_accuracy": {
+        "verification_accuracy": 0.89595,
+        "best_threshold": 0.2585170340681362,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9896640826873385,
+      "rank-5": 0.9974160206718347,
+      "n_valid_probes": 1161,
+      "n_total_samples": 1161
+    },
+    {
+      "checkpoint": "log_nested_cv_palm\\palm_outer_fold_03.pt",
+      "outer_fold": 3,
+      "n_test_subjects": 41,
+      "n_test_samples": 1236,
+      "eer_recomputed": {
+        "eer": 0.10285,
+        "eer_threshold": 0.25050100200400793,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.10285,
+      "verification_accuracy": {
+        "verification_accuracy": 0.8976,
+        "best_threshold": 0.26252505010020033,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9878640776699029,
+      "rank-5": 0.9967637540453075,
+      "n_valid_probes": 1236,
+      "n_total_samples": 1236
+    },
+    {
+      "checkpoint": "log_nested_cv_palm\\palm_outer_fold_04.pt",
+      "outer_fold": 4,
+      "n_test_subjects": 43,
+      "n_test_samples": 1383,
+      "eer_recomputed": {
+        "eer": 0.12,
+        "eer_threshold": 0.2104208416833666,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.12,
+      "verification_accuracy": {
+        "verification_accuracy": 0.88135,
+        "best_threshold": 0.23847695390781554,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9949385394070861,
+      "rank-5": 0.9985538684020245,
+      "n_valid_probes": 1383,
+      "n_total_samples": 1383
+    }
+  ],
+  "summary": {
+    "stream": "palm",
+    "n_folds": 4,
+    "mean_rank1": 0.9899916749410819,
+    "std_rank1": 0.002971274932165954,
+    "mean_rank5": 0.996741103087484,
+    "std_rank5": 0.0015846072833138848,
+    "mean_eer": 0.10835,
+    "std_eer": 0.006805236953993592,
+    "mean_verification_accuracy": 0.89255,
+    "std_verification_accuracy": 0.006520448604198954
+  }
+}

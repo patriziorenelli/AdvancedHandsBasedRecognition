@@ -1,0 +1,85 @@
+{
+  "folds": [
+    {
+      "checkpoint": "log_final_dorsal_nested_run\\nested_cv\\dorsal_outer_fold_01.pt",
+      "outer_fold": 1,
+      "n_test_subjects": 56,
+      "n_test_samples": 1538,
+      "eer_recomputed": {
+        "eer": 0.065,
+        "eer_threshold": 0.2985971943887775,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.065,
+      "verification_accuracy": {
+        "verification_accuracy": 0.93975,
+        "best_threshold": 0.350701402805611,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.988296488946684,
+      "rank-5": 0.9973992197659298,
+      "n_valid_probes": 1538,
+      "n_total_samples": 1538
+    },
+    {
+      "checkpoint": "log_final_dorsal_nested_run\\nested_cv\\dorsal_outer_fold_02.pt",
+      "outer_fold": 2,
+      "n_test_subjects": 51,
+      "n_test_samples": 1563,
+      "eer_recomputed": {
+        "eer": 0.0847,
+        "eer_threshold": 0.2865731462925851,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.0847,
+      "verification_accuracy": {
+        "verification_accuracy": 0.9155,
+        "best_threshold": 0.29058116232464926,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9961612284069098,
+      "rank-5": 0.9980806142034548,
+      "n_valid_probes": 1563,
+      "n_total_samples": 1563
+    },
+    {
+      "checkpoint": "log_final_dorsal_nested_run\\nested_cv\\dorsal_outer_fold_03.pt",
+      "outer_fold": 3,
+      "n_test_subjects": 57,
+      "n_test_samples": 1844,
+      "eer_recomputed": {
+        "eer": 0.0959,
+        "eer_threshold": 0.2745490981963927,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "eer_saved_in_checkpoint": 0.0959,
+      "verification_accuracy": {
+        "verification_accuracy": 0.90545,
+        "best_threshold": 0.2985971943887775,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "rank-1": 0.9929501084598699,
+      "rank-5": 0.9972885032537961,
+      "n_valid_probes": 1844,
+      "n_total_samples": 1844
+    }
+  ],
+  "summary": {
+    "stream": "dorsal",
+    "n_folds": 3,
+    "mean_rank1": 0.9924692752711546,
+    "std_rank1": 0.0032287182297660944,
+    "mean_rank5": 0.9975894457410602,
+    "std_rank5": 0.0003502374245689608,
+    "mean_eer": 0.08186666666666666,
+    "std_eer": 0.01277297494278012,
+    "mean_verification_accuracy": 0.9202333333333333,
+    "std_verification_accuracy": 0.01439735701053804
+  }
+}

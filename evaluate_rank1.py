@@ -229,7 +229,9 @@ def build_eval_dataset(stream: str, data_dir, eval_subjects, n_knuckles_max,
         vit_embed_cache = None
         if embed_cache_path:
             data = np.load(embed_cache_path, allow_pickle=True)
-            vit_embed_cache = {str(p): data["embeds"][i] for i, p in enumerate(data["paths"])}
+            embeds = data["embeds"]          # <-- carica UNA volta in RAM
+            paths = data["paths"]            # <-- carica UNA volta in RAM
+            vit_embed_cache = {str(p): embeds[i] for i, p in enumerate(paths)}
         ds = PalmBiometricDataset(
             data_dir, subject_ids=eval_subjects, train=False,
             vit_embed_cache=vit_embed_cache,
@@ -239,12 +241,13 @@ def build_eval_dataset(stream: str, data_dir, eval_subjects, n_knuckles_max,
         swin_embed_cache = None
         if embed_cache_path:
             data = np.load(embed_cache_path, allow_pickle=True)
-            swin_embed_cache = {str(p): data["embeds"][i] for i, p in enumerate(data["paths"])}
+            embeds = data["embeds"]          # <-- carica UNA volta in RAM
+            paths = data["paths"]            # <-- carica UNA volta in RAM
+            swin_embed_cache = {str(p): embeds[i] for i, p in enumerate(paths)}
         ds = DorsalBiometricDataset(
             data_dir, subject_ids=eval_subjects, train=False,
             swin_embed_cache=swin_embed_cache,
         )
-    # stessa dimensionalita' con cui e' stato allenato il modello
     ds.n_knuckles_max = n_knuckles_max
     return ds
 
