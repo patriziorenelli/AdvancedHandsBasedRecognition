@@ -36,9 +36,12 @@ RIASSUNTO:
 
 
 TODO: !!!!
-0- Capire nomenclatura immagini presenti in Tesi>test_image>Sample dataset 2
-1- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: 
+
+STO SCARICANDO IL DATASET https://zenodo.org/records/21656114?preview_file=Participants.zip CAPIRE COME STRUTTURARE LA PIPELINE MULTIMODALE SU QUESTO DATASET
+
+1- Provare la pipeline completa con la fusione e valutare come viene fatta la fusione dei 2 stream: FORSE COME FARE LA FUSIONE E' DA RIVEDERE? 
      !!! Per la tesi userei assolutamente la versione calibrate_cv, non una calibrazione fatta indiscriminatamente su tutto il dataset !!!
+
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
      - sulle singole componenti del palmar:
