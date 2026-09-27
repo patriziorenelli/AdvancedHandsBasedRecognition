@@ -55,27 +55,53 @@ TODO: !!!!
 
 Comandi esecuzione: 
 
-python multimodal_fusional_new_dataset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --out_dir new_dataset_preprocessed --skip_preprocessing --calibrate_alpha --score_norm zscore --seed 42
-Alpha calibrato subject-disjoint: 0.10
-Soggetti calibration: 39
-Soggetti test:        158
+Ora si sta provando: 
+
+python multimodal_fusional_new_dataset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --augmented_raw_dir "D:\Users\Patrizio\Desktop\Tesi\augmented_raw" --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --out_dir "D:\Users\Patrizio\Desktop\Tesi\run_results_v4" --palm_checkpoint models_final/palm_embedding_final.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final.pt --calibrate_alpha_for_rank --rank_kfold 5 --gallery_holdout_real 1
+
+Per identificazione:
+Si creano per ogni soggetto: 2 mani x 1 coppia = 2 coppie geniuine per soggetto (sarebbe 1 reale e una augmentata)
+Per le coppie impostor, si creano 792 coppie, ma le mescola e ne tiene casualmente solo 396 
+
+Vengono fatte 396 coppie genuine e 396 impostori -> 792 verifiche 1:1
+
+
+Per verifica: 
+Ogni probe invece viene confrontato con con 198 candidati -> tutte le altre identità filtrate per soggetto e mano, dello stesso lato sx o dx del prob -> è un identificazione 1:198
+396 probe x 198 candidati =  78408 confronti prer sistema
+vengono fatti 3 sistemi (palmar, dorsal, fused) = 235.224 confronti totali di identificazioni 
+in termini di "query" (cioè volte in cui viene calcolato un ranking e un rank1/rank5/rank10): 396 query per sistema × 3 sistemi = 1.188 query totali
 
 ========================================================================
 VERIFICA 1:1
 ========================================================================
-Coppie genuine:  147
-Coppie impostor: 147
-Alpha:            0.10
-    palm: EER=23.81% | AUC=0.8372 | Acc@0.55=55.78%
-  dorsal: EER=8.84% | AUC=0.9677 | Acc@0.55=50.00%
-   fused: EER=6.80% | AUC=0.9706 | Acc@0.55=88.10%
+Protocollo genuine usato: same_hand_multi_sample
+Coppie genuine:  396
+Coppie impostor: 396
+Alpha:            0.50
+    palm: EER=0.00% | AUC=1.0000 | Acc@EER=100.00% | Acc@0.55=59.22%
+  dorsal: EER=2.02% | AUC=0.9976 | Acc@EER=97.98% | Acc@0.55=50.00%
+   fused: EER=0.00% | AUC=1.0000 | Acc@EER=100.00% | Acc@0.55=98.74%  [scala non comparabile, vedi note]
 
-========================================================================
-IDENTIFICAZIONE 1:N
-========================================================================
-    palm: Rank-1=29.25% | Rank-5=49.66% | Rank-10=61.90% | MRR=0.3961
-  dorsal: Rank-1=64.63% | Rank-5=85.71% | Rank-10=91.16% | MRR=0.7369
-   fused: Rank-1=67.01% | Rank-5=86.73% | Rank-10=94.22% | MRR=0.7681
+[IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+Protocollo identificazione usato: same_hand_multi_sample_meanenroll
+Alpha usato per l'identificazione: 0.10
+    palm: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(aug)=100.00%
+           margine medio top1-top2: 0.1183
+  dorsal: Rank-1=95.45% | Rank-5=98.99% | Rank-10=98.99% | MRR=0.9691 | Rank-1(aug)=95.45%
+           margine medio top1-top2: 0.0371 (quando sbagliato: 0.0041)
+   fused: Rank-1=97.47% | Rank-5=100.00% | Rank-10=100.00% | MRR=0.9838 | Rank-1(aug)=97.47%
+           margine medio top1-top2: 0.5908 (quando sbagliato: 0.0218)
+
+
+Sta facendo data_augmentation dei campioni originali per avere un'altra immagine genuina per soggetto in modo da usarla nell'esecuzione, 
+sull'immagine che viene creata dalla data augmentation verrà applicato il preprocessing e salvato, in modo che nei run successivi non lo esegua usando --skip_preprocessing
+In particolare:
+- Rotazione casuale: angolo uniforme tra -8° e +8° (resample bicubico, expand=False, quindi le dimensioni restano invariate e agli angoli può comparire un piccolo bordo).
+- Jitter di luminosità: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Brightness).
+- Jitter di contrasto: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Contrast).
+- Piccola traslazione (shift): dx, dy interi casuali entro ±3% della larghezza/altezza dell'immagine (resample bicubico via Image.AFFINE).
+
 
 ----------------------------------------
 eseguito: 
@@ -91,27 +117,7 @@ ESEGUITO MA DA CAPIRE SE USEREMO QUESTA CACHE: SOTTO IL RISULTATO DA USARE IN TE
 ----
 
 
-python multimodal_fusional_new_dataset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --out_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --calibrate_alpha --score_norm zscore --seed 42
-Alpha calibrato subject-disjoint: 0.10
-Soggetti calibration: 39
-Soggetti test:        158
 
-========================================================================
-VERIFICA 1:1
-========================================================================
-Coppie genuine:  147
-Coppie impostor: 147
-Alpha:            0.10
-    palm: EER=23.81% | AUC=0.8372 | Acc@0.55=55.78%
-  dorsal: EER=8.84% | AUC=0.9677 | Acc@0.55=50.00%
-   fused: EER=6.80% | AUC=0.9706 | Acc@0.55=88.10%
-
-========================================================================
-IDENTIFICAZIONE 1:N
-========================================================================
-    palm: Rank-1=29.25% | Rank-5=49.66% | Rank-10=61.90% | MRR=0.3961
-  dorsal: Rank-1=64.63% | Rank-5=85.71% | Rank-10=91.16% | MRR=0.7369
-   fused: Rank-1=67.01% | Rank-5=86.73% | Rank-10=94.22% | MRR=0.7681
 
 
 
@@ -143,10 +149,10 @@ Per palmo: python evaluate_rank1_final_model.py --stream palm --data_dir "D:\Use
 
 ==============================
 SCARICATO IL DATASET https://zenodo.org/records/21656114?preview_file=Participants.zip PER TEST CROSS-DATASET
-PREPROCESSATO:
-SUCCESS: 775
-SKIPPED: 17
-   - Nessuna mano rilevata: 17
+PREPROCESSATO 
+SUCCESS: 776
+SKIPPED: 16
+   - Nessuna mano rilevata: 16
 ERRORS: 0
 ==============================
 

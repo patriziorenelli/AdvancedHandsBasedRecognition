@@ -522,21 +522,59 @@ def process_single_image(task):
         if HANDS_DETECTOR is None:
             init_worker()
 
-        # 2. DETECTION A DOPPIO TENTATIVO (Boost illuminazione + Fallback)
-        # Tentativo A: Applicazione CLAHE temporaneo per accentuare i confini su sfondo nero
+        # 2. DETECTION A TENTATIVI MULTIPLI. Sappiamo per certo che ogni
+        # immagine contiene una mano, quindi se il detector fallisce sempre
+        # e' un limite del detector (posa/contrasto/scala), non del dato:
+        # proviamo piu' varianti prima di arrenderci.
+
+        def try_detect(bgr_img):
+            rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+            return HANDS_DETECTOR.process(rgb_img)
+
+        # A: CLAHE per accentuare i confini su sfondo nero
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         clahe_det = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
         l_clahe = clahe_det.apply(l)
         enhanced_bgr = cv2.cvtColor(cv2.merge([l_clahe, a, b]), cv2.COLOR_LAB2BGR)
-        enhanced_rgb = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+        results = try_detect(enhanced_bgr)
 
-        results = HANDS_DETECTOR.process(enhanced_rgb)
-
-        # Tentativo B (Fallback): Se fallisce sul contrasto, prova con l'RGB standard
+        # B: RGB standard
         if not results or not results.multi_hand_landmarks:
-            img_rgb_standard = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            results = HANDS_DETECTOR.process(img_rgb_standard)
+            results = try_detect(img)
+
+        # C: upscale 2x (mani piccole nel frame). Se funziona, adottiamo
+        # l'immagine upscalata come base per il resto della pipeline: il
+        # normalize/crop successivo lavora comunque in coordinate relative.
+        if not results or not results.multi_hand_landmarks:
+            upscaled = cv2.resize(img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            results_up = try_detect(upscaled)
+            if results_up and results_up.multi_hand_landmarks:
+                results = results_up
+                img = upscaled
+                h, w = img.shape[:2]
+
+        # D: equalizzazione istogramma globale (piu' aggressiva della CLAHE)
+        if not results or not results.multi_hand_landmarks:
+            gray_eq = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+            eq_bgr = cv2.cvtColor(gray_eq, cv2.COLOR_GRAY2BGR)
+            results = try_detect(eq_bgr)
+
+        # E: piccole rotazioni di prova. Se una rotazione fa scattare la
+        # detection, adottiamo l'immagine ruotata come base: e' comunque
+        # una vista valida della stessa mano, e i moduli di normalizzazione
+        # a valle lavorano sui landmark rilevati in quella vista, senza
+        # bisogno di riportarli all'orientamento originale.
+        if not results or not results.multi_hand_landmarks:
+            center = (w / 2, h / 2)
+            for angle in (15, -15, 30, -30, 45, -45):
+                M_rot = cv2.getRotationMatrix2D(center, angle, 1.0)
+                rotated = cv2.warpAffine(img, M_rot, (w, h), borderValue=(0, 0, 0))
+                results_rot = try_detect(rotated)
+                if results_rot and results_rot.multi_hand_landmarks:
+                    results = results_rot
+                    img = rotated
+                    break
 
         if not results or not results.multi_hand_landmarks:
             return {"status": "skipped", "file": str(img_path), "reason": "Nessuna mano rilevata"}
@@ -595,7 +633,14 @@ def process_single_image(task):
 
         side_code = "L" if str(hand_side).lower().startswith("l") else "R"
         view_code = "dorsal" if is_dorsal else "palmar"
-        base_name = f"{subject_id}_{side_code}_{view_code}_{seq_num:03d}"
+        # seq_num puo' essere un intero (chiamata standalone, numerazione
+        # progressiva) oppure una stringa che incorpora gia' il sample_id
+        # completo, tag di augmentazione incluso (chiamata dal fusion script,
+        # es. "1_aug2"). In entrambi i casi il valore finisce nel nome del
+        # file: se due scatti diversi della stessa mano finissero con lo
+        # stesso seq_num, si sovrascriverebbero a vicenda in output_dir.
+        seq_str = f"{seq_num:03d}" if isinstance(seq_num, int) else str(seq_num)
+        base_name = f"{subject_id}_{side_code}_{view_code}_{seq_str}"
 
         if not is_dorsal:
             # PALMO
@@ -728,7 +773,7 @@ def run_async_preprocessing(participants_dir, output_dir, max_workers=4, chunksi
 
 if __name__ == "__main__":
     PARTICIPANTS_DIR = r"D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants"
-    OUTPUT_DIR = "./new_dataset_preprocessed"
+    OUTPUT_DIR = r"D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed"
     NUM_WORKERS = os.cpu_count() or 4
 
     run_async_preprocessing(PARTICIPANTS_DIR, OUTPUT_DIR, max_workers=NUM_WORKERS, chunksize=8)
