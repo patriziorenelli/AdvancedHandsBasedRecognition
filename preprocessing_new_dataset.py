@@ -1,7 +1,7 @@
 """
 ============================================================
 PREPROCESSING PIPELINE - RICONOSCIMENTO BIOMETRICO MANO
-Versione aggiornata per immagini ritagliate su sfondo nero
+Versione aggiornata: sfondo adattivo + detection multi-margine
 ============================================================
 """
 
@@ -33,6 +33,21 @@ MIN_HANDEDNESS_SCORE = 0.30  # Abbassato da 0.50 per catturare mani incerte
 MIN_HAND_AREA_RATIO = 0.005  # Abbassato da 0.01 per piccoli crop
 MIN_SHARPNESS = 1.5          # Varianza Laplaciano minima
 
+# Sappiamo che OGNI immagine contiene una mano e che lato/vista arrivano dal
+# nome file: handedness, area e sharpness NON devono far scartare il campione
+# (un campione scartato viene poi perso dalla fusione). Di default sono
+# "soft": generano solo un warning nel metadata. Mettere True per il vecchio
+# comportamento (scarto).
+STRICT_QUALITY_FILTERS = False
+
+# Margini di sfondo provati in sequenza se la mano non viene rilevata.
+# 0.12 = comportamento precedente (identico per le immagini gia' funzionanti).
+PADDING_LADDER = (0.12, 0.30, 0.55)
+MAX_UPSCALE_SIDE = 2400      # niente upscale 2x oltre questa dimensione
+
+# Salva in <output_dir>/_failed_debug le immagini per cui la detection fallisce
+SAVE_FAILED_DEBUG = True
+
 
 # ============================================================
 # MEDIAPIPE INIZIALIZZAZIONE
@@ -58,11 +73,79 @@ def init_worker():
 
 
 # ============================================================
-# CARICAMENTO IMMAGINE CON SFONDO NERO PICCOLO
+# CARICAMENTO IMMAGINE E SFONDO ADATTIVO
 # ============================================================
 
-BLACK_BORDER_RATIO = 0.12   # Margine ridotto al 12% (invece del 55%)
-BLACK_BORDER_MIN_PX = 30    # Margine minimo in pixel
+BLACK_BORDER_RATIO = 0.12   # margine di default (primo tentativo)
+BLACK_BORDER_MIN_PX = 30    # margine minimo in pixel
+
+
+def read_image_bgr(img_path):
+    """
+    Legge l'immagine in BGR a 8 bit gestendo i casi che cv2.imread(IMREAD_COLOR)
+    tratta male:
+    - PNG con canale alpha (sfondo trasparente): IMREAD_COLOR scarta l'alpha e
+      i pixel "trasparenti" tornano con un colore arbitrario (spesso rumore o
+      bianco). Qui l'immagine viene composta su NERO usando l'alpha.
+    - immagini a 16 bit / scala di grigi.
+    - percorsi con caratteri non ASCII (imread ritorna None su Windows).
+    """
+    try:
+        data = np.fromfile(str(img_path), dtype=np.uint8)
+        img = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+    except Exception:
+        return None
+
+    if img is None:
+        return None
+
+    if img.dtype == np.uint16:
+        img = (img / 257.0).astype(np.uint8)
+    elif img.dtype != np.uint8:
+        img = np.clip(img, 0, 255).astype(np.uint8)
+
+    if img.ndim == 2:
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+    if img.shape[2] == 4:
+        alpha = img[:, :, 3:4].astype(np.float32) / 255.0
+        bgr = img[:, :, :3].astype(np.float32)
+        return np.clip(bgr * alpha, 0, 255).astype(np.uint8)
+
+    return img
+
+
+def estimate_background_color(img):
+    """
+    Stima il colore di sfondo dai 4 ANGOLI (mediana), non da tutto il bordo:
+    in un ritaglio stretto la mano/il polso toccano i lati, gli angoli invece
+    sono quasi sempre sfondo. Per sfondo nero ritorna ~(0, 0, 0), quindi il
+    comportamento resta identico a prima.
+    """
+    h, w = img.shape[:2]
+    p = max(4, int(round(min(h, w) * 0.03)))
+    p = min(p, h // 2, w // 2)
+    corners = np.concatenate([
+        img[:p, :p].reshape(-1, 3),
+        img[:p, -p:].reshape(-1, 3),
+        img[-p:, :p].reshape(-1, 3),
+        img[-p:, -p:].reshape(-1, 3),
+    ])
+    med = np.median(corners, axis=0)
+    return tuple(int(v) for v in med)
+
+
+def pad_image(img, ratio, bg_color, min_border_px=BLACK_BORDER_MIN_PX):
+    """Aggiunge un margine del colore di sfondo stimato (non piu' sempre nero)."""
+    h, w = img.shape[:2]
+    border_x = max(int(min_border_px), int(round(w * ratio)))
+    border_y = max(int(min_border_px), int(round(h * ratio)))
+    return cv2.copyMakeBorder(
+        img,
+        border_y, border_y, border_x, border_x,
+        borderType=cv2.BORDER_CONSTANT,
+        value=bg_color
+    )
 
 
 def load_image_with_padded_background(
@@ -70,28 +153,11 @@ def load_image_with_padded_background(
     border_ratio=BLACK_BORDER_RATIO,
     min_border_px=BLACK_BORDER_MIN_PX
 ):
-    """
-    Legge l'immagine e aggiunge un piccolo margine NERO attorno,
-    evitando la cornice bianca e mantenendo la mano di dimensioni adeguate.
-    """
-    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-
+    """Compatibilita': legge + padding con sfondo stimato (singolo margine)."""
+    img = read_image_bgr(img_path)
     if img is None:
         return None
-
-    h, w = img.shape[:2]
-
-    border_x = max(int(min_border_px), int(round(w * border_ratio)))
-    border_y = max(int(min_border_px), int(round(h * border_ratio)))
-
-    padded = cv2.copyMakeBorder(
-        img,
-        border_y, border_y, border_x, border_x,
-        borderType=cv2.BORDER_CONSTANT,
-        value=(0, 0, 0)
-    )
-
-    return padded
+    return pad_image(img, border_ratio, estimate_background_color(img), min_border_px)
 
 
 # ============================================================
@@ -232,7 +298,7 @@ def crop_hand_from_landmarks(img, coords, padding_ratio=0.30, min_padding_px=20)
     return hand_crop, coords_local, bbox, missing_padding
 
 
-def rotate_hand_upright(img, coords):
+def rotate_hand_upright(img, coords, bg_color=(0, 0, 0)):
     h, w = img.shape[:2]
 
     wrist = coords[0]
@@ -255,7 +321,7 @@ def rotate_hand_upright(img, coords):
         img, M, (w, h),
         flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0)
+        borderValue=bg_color
     )
 
     rotated_coords = transform_points(coords, M)
@@ -292,7 +358,8 @@ def crop_final_hand(img, coords, padding_ratio=0.10):
     return crop, new_coords
 
 
-def normalize_hand_geometry(img, original_coords, initial_padding_ratio=0.30, final_padding_ratio=0.10):
+def normalize_hand_geometry(img, original_coords, initial_padding_ratio=0.30, final_padding_ratio=0.10,
+                            bg_color=(0, 0, 0)):
     hand_crop, local_coords, original_bbox, missing_padding = crop_hand_from_landmarks(
         img, original_coords, padding_ratio=initial_padding_ratio
     )
@@ -300,7 +367,7 @@ def normalize_hand_geometry(img, original_coords, initial_padding_ratio=0.30, fi
     if not valid_image(hand_crop):
         return None, None, None, None
 
-    rotated_img, rotated_coords, M = rotate_hand_upright(hand_crop, local_coords)
+    rotated_img, rotated_coords, M = rotate_hand_upright(hand_crop, local_coords, bg_color=bg_color)
 
     if not valid_image(rotated_img):
         return None, None, None, None
@@ -410,7 +477,7 @@ def _stable_direction(coords, prev_idx, curr_idx, next_idx):
     return direction, ref_length
 
 
-def extract_knuckle_roi(img, coords, prev_idx, joint_idx, next_idx, joint_type="mcp"):
+def extract_knuckle_roi(img, coords, prev_idx, joint_idx, next_idx, joint_type="mcp", bg_color=(0, 0, 0)):
     if joint_type not in KNUCKLE_PARAMS:
         return None
 
@@ -456,13 +523,13 @@ def extract_knuckle_roi(img, coords, prev_idx, joint_idx, next_idx, joint_type="
         img, H, (roi_width, roi_height),
         flags=cv2.INTER_CUBIC,
         borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0)
+        borderValue=bg_color
     )
 
     return crop if valid_image(crop) else None
 
 
-def extract_all_knuckle_rois(img, coords):
+def extract_all_knuckle_rois(img, coords, bg_color=(0, 0, 0)):
     rois = {}
     for finger_name, chain in FINGER_CHAINS.items():
         mcp_idx, pip_idx, dip_idx, tip_idx = chain
@@ -472,7 +539,7 @@ def extract_all_knuckle_rois(img, coords):
             ("dip", pip_idx, dip_idx, tip_idx)
         ]
         for joint_type, prev_idx, joint_idx, next_idx in joint_specs:
-            roi = extract_knuckle_roi(img, coords, prev_idx, joint_idx, next_idx, joint_type=joint_type)
+            roi = extract_knuckle_roi(img, coords, prev_idx, joint_idx, next_idx, joint_type=joint_type, bg_color=bg_color)
             rois[f"{finger_name}_{joint_type}"] = roi
     return rois
 
@@ -503,6 +570,94 @@ def preprocess_knuckle(img):
 
 
 # ============================================================
+# DETECTION MULTI-TENTATIVO
+# ============================================================
+
+def _detect_on(bgr_img):
+    rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+    res = HANDS_DETECTOR.process(rgb_img)
+    if res and res.multi_hand_landmarks:
+        return res
+    return None
+
+
+def detect_hand_multi(raw_img, bg_color):
+    """
+    Prova a rilevare la mano variando margine di sfondo, contrasto, scala e
+    rotazione. Il primo margine (0.12) con lo stesso ordine di varianti del
+    codice precedente: le immagini che gia' funzionavano producono gli stessi
+    landmark. Solo se falliscono si passa a margini piu' ampi (0.30, 0.55):
+    MediaPipe (palm detector) va in difficolta' sia con mani troppo grandi nel
+    frame / dita tagliate ai bordi (ritagli stretti), sia con sfondo
+    innaturale rispetto al ritaglio.
+
+    Ritorna (results, immagine_su_cui_valgono_i_landmark, tentativo) oppure
+    (None, None, None).
+    """
+    for ratio in PADDING_LADDER:
+        img = pad_image(raw_img, ratio, bg_color)
+        h, w = img.shape[:2]
+        tag = f"pad{int(round(ratio * 100))}"
+
+        # A: CLAHE (i landmark valgono comunque su `img`, stessa geometria)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe_det = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
+        enhanced_bgr = cv2.cvtColor(cv2.merge([clahe_det.apply(l), a, b]), cv2.COLOR_LAB2BGR)
+        res = _detect_on(enhanced_bgr)
+        if res:
+            return res, img, f"{tag}/clahe"
+
+        # B: RGB standard
+        res = _detect_on(img)
+        if res:
+            return res, img, f"{tag}/rgb"
+
+        # C: upscale 2x (mani piccole nel frame)
+        if max(h, w) <= MAX_UPSCALE_SIDE:
+            upscaled = cv2.resize(img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            res = _detect_on(upscaled)
+            if res:
+                return res, upscaled, f"{tag}/upscale2x"
+
+        # D: equalizzazione istogramma globale
+        gray_eq = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+        res = _detect_on(cv2.cvtColor(gray_eq, cv2.COLOR_GRAY2BGR))
+        if res:
+            return res, img, f"{tag}/equalize"
+
+        # E: piccole rotazioni (bordi riempiti col colore di sfondo, non nero)
+        center = (w / 2, h / 2)
+        for angle in (15, -15, 30, -30, 45, -45):
+            M_rot = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(img, M_rot, (w, h), borderValue=bg_color)
+            res = _detect_on(rotated)
+            if res:
+                return res, rotated, f"{tag}/rot{angle}"
+
+    return None, None, None
+
+
+def _save_failed_debug(raw_img, bg_color, subject_id, img_path, output_dir):
+    if not SAVE_FAILED_DEBUG:
+        return
+    try:
+        dbg_dir = Path(output_dir) / "_failed_debug"
+        dbg_dir.mkdir(parents=True, exist_ok=True)
+        name = f"{subject_id}_{Path(img_path).stem}_bg{bg_color[2]}-{bg_color[1]}-{bg_color[0]}.png"
+        cv2.imwrite(str(dbg_dir / name), pad_image(raw_img, 0.30, bg_color))
+    except Exception:
+        pass
+
+
+def _center_crop(img, frac=0.6):
+    h, w = img.shape[:2]
+    ch, cw = int(h * frac), int(w * frac)
+    y1, x1 = (h - ch) // 2, (w - cw) // 2
+    return img[y1:y1 + ch, x1:x1 + cw].copy()
+
+
+# ============================================================
 # PROCESSAMENTO SINGOLA IMMAGINE
 # ============================================================
 
@@ -511,100 +666,51 @@ def process_single_image(task):
     (img_path, subject_id, hand_side, is_dorsal, seq_num, output_dir) = task
 
     try:
-        # 1. Caricamento immagine con bordo NERO proporzionato
-        img = load_image_with_padded_background(img_path)
+        # 1. Caricamento (gestisce alpha/16 bit) e stima dello sfondo reale
+        raw = read_image_bgr(img_path)
 
-        if img is None:
+        if raw is None:
             return {"status": "error", "file": str(img_path), "reason": "Immagine non trovata o corrotta"}
 
-        h, w = img.shape[:2]
+        bg_color = estimate_background_color(raw)
 
         if HANDS_DETECTOR is None:
             init_worker()
 
-        # 2. DETECTION A TENTATIVI MULTIPLI. Sappiamo per certo che ogni
-        # immagine contiene una mano, quindi se il detector fallisce sempre
-        # e' un limite del detector (posa/contrasto/scala), non del dato:
-        # proviamo piu' varianti prima di arrenderci.
+        # 2. Detection a tentativi multipli (margini di sfondo + varianti)
+        results, img, attempt = detect_hand_multi(raw, bg_color)
 
-        def try_detect(bgr_img):
-            rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
-            return HANDS_DETECTOR.process(rgb_img)
-
-        # A: CLAHE per accentuare i confini su sfondo nero
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        clahe_det = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
-        l_clahe = clahe_det.apply(l)
-        enhanced_bgr = cv2.cvtColor(cv2.merge([l_clahe, a, b]), cv2.COLOR_LAB2BGR)
-        results = try_detect(enhanced_bgr)
-
-        # B: RGB standard
-        if not results or not results.multi_hand_landmarks:
-            results = try_detect(img)
-
-        # C: upscale 2x (mani piccole nel frame). Se funziona, adottiamo
-        # l'immagine upscalata come base per il resto della pipeline: il
-        # normalize/crop successivo lavora comunque in coordinate relative.
-        if not results or not results.multi_hand_landmarks:
-            upscaled = cv2.resize(img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-            results_up = try_detect(upscaled)
-            if results_up and results_up.multi_hand_landmarks:
-                results = results_up
-                img = upscaled
-                h, w = img.shape[:2]
-
-        # D: equalizzazione istogramma globale (piu' aggressiva della CLAHE)
-        if not results or not results.multi_hand_landmarks:
-            gray_eq = cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
-            eq_bgr = cv2.cvtColor(gray_eq, cv2.COLOR_GRAY2BGR)
-            results = try_detect(eq_bgr)
-
-        # E: piccole rotazioni di prova. Se una rotazione fa scattare la
-        # detection, adottiamo l'immagine ruotata come base: e' comunque
-        # una vista valida della stessa mano, e i moduli di normalizzazione
-        # a valle lavorano sui landmark rilevati in quella vista, senza
-        # bisogno di riportarli all'orientamento originale.
-        if not results or not results.multi_hand_landmarks:
-            center = (w / 2, h / 2)
-            for angle in (15, -15, 30, -30, 45, -45):
-                M_rot = cv2.getRotationMatrix2D(center, angle, 1.0)
-                rotated = cv2.warpAffine(img, M_rot, (w, h), borderValue=(0, 0, 0))
-                results_rot = try_detect(rotated)
-                if results_rot and results_rot.multi_hand_landmarks:
-                    results = results_rot
-                    img = rotated
-                    break
-
-        if not results or not results.multi_hand_landmarks:
+        if results is None:
+            _save_failed_debug(raw, bg_color, subject_id, img_path, output_dir)
             return {"status": "skipped", "file": str(img_path), "reason": "Nessuna mano rilevata"}
 
+        h, w = img.shape[:2]
         landmarks = results.multi_hand_landmarks[0].landmark
         coords_original = landmarks_to_pixels(landmarks, w, h)
+        warnings = []
 
-        # 3. Controlli permissivi
+        # 3. Controlli di qualita' (soft di default: il lato arriva dal nome
+        # file, quindi la handedness del detector non serve a nulla di critico)
         handedness_score = 1.0
         if results.multi_handedness:
             handedness_score = float(results.multi_handedness[0].classification[0].score)
             if handedness_score < MIN_HANDEDNESS_SCORE:
-                return {
-                    "status": "skipped",
-                    "file": str(img_path),
-                    "reason": f"Confidenza handedness bassa ({handedness_score:.2f})"
-                }
+                msg = f"Confidenza handedness bassa ({handedness_score:.2f})"
+                if STRICT_QUALITY_FILTERS:
+                    return {"status": "skipped", "file": str(img_path), "reason": msg}
+                warnings.append(msg)
 
         bbox_w = float(coords_original[:, 0].max() - coords_original[:, 0].min())
         bbox_h = float(coords_original[:, 1].max() - coords_original[:, 1].min())
         area_ratio = (bbox_w * bbox_h) / float(w * h)
 
         if area_ratio < MIN_HAND_AREA_RATIO:
-            return {
-                "status": "skipped",
-                "file": str(img_path),
-                "reason": f"Bounding box mano troppo piccola ({area_ratio:.4f})"
-            }
+            msg = f"Bounding box mano troppo piccola ({area_ratio:.4f})"
+            if STRICT_QUALITY_FILTERS:
+                return {"status": "skipped", "file": str(img_path), "reason": msg}
+            warnings.append(msg)
 
-        # 4. Normalizzazione geometrica
+        # 4. Normalizzazione geometrica (rotazioni riempite con lo sfondo reale)
         img, coords_original, was_mirrored = canonicalize_laterality(img, coords_original, hand_side)
 
         final_padding = 0.15 if is_dorsal else 0.10
@@ -612,20 +718,20 @@ def process_single_image(task):
             img,
             coords_original,
             initial_padding_ratio=0.30,
-            final_padding_ratio=final_padding
+            final_padding_ratio=final_padding,
+            bg_color=bg_color
         )
 
         if not valid_image(hand_img):
             return {"status": "error", "file": str(img_path), "reason": "Errore normalizzazione geometrica"}
 
-        # 5. Metriche di qualita'
-        quality = compute_quality_metrics(hand_img)
+        # 5. Metriche di qualita' (calcolate a dimensione fissa, comparabili)
+        quality = compute_quality_metrics(resize_with_crop_fill(hand_img, target_size=VIT_SIZE))
         if quality["sharpness"] < MIN_SHARPNESS:
-            return {
-                "status": "skipped",
-                "file": str(img_path),
-                "reason": f"Immagine troppo sfocata (sharpness={quality['sharpness']})"
-            }
+            msg = f"Immagine molto sfocata (sharpness={quality['sharpness']})"
+            if STRICT_QUALITY_FILTERS:
+                return {"status": "skipped", "file": str(img_path), "reason": msg}
+            warnings.append(msg)
 
         # 6. Salvataggio Output
         out_folder = Path(output_dir) / str(subject_id)
@@ -633,28 +739,38 @@ def process_single_image(task):
 
         side_code = "L" if str(hand_side).lower().startswith("l") else "R"
         view_code = "dorsal" if is_dorsal else "palmar"
-        # seq_num puo' essere un intero (chiamata standalone, numerazione
-        # progressiva) oppure una stringa che incorpora gia' il sample_id
-        # completo, tag di augmentazione incluso (chiamata dal fusion script,
-        # es. "1_aug2"). In entrambi i casi il valore finisce nel nome del
-        # file: se due scatti diversi della stessa mano finissero con lo
-        # stesso seq_num, si sovrascriverebbero a vicenda in output_dir.
+        # seq_num puo' essere un intero (chiamata standalone) oppure una
+        # stringa con il sample_id completo, tag di augmentazione incluso
+        # (chiamata dal fusion script, es. "1_aug2"): finisce nel nome file
+        # cosi' scatti diversi della stessa mano non si sovrascrivono.
         seq_str = f"{seq_num:03d}" if isinstance(seq_num, int) else str(seq_num)
         base_name = f"{subject_id}_{side_code}_{view_code}_{seq_str}"
+
+        palm_roi_fallback = False
 
         if not is_dorsal:
             # PALMO
             palm_hand_processed = preprocess_rgb(hand_img, sigma=25, clahe_clip=1.5)
             palm_hand_processed = resize_with_crop_fill(palm_hand_processed, target_size=VIT_SIZE)
-            save_image(out_folder / f"{base_name}_palm_hand.png", palm_hand_processed)
+            if not save_image(out_folder / f"{base_name}_palm_hand.png", palm_hand_processed):
+                return {"status": "error", "file": str(img_path), "reason": "Scrittura palm_hand fallita"}
 
+            # Il fusion script richiede SEMPRE palm_roi.png (find_processed_base):
+            # se manca, il campione viene scartato in silenzio a valle anche se
+            # qui risulta "success". Se l'ROI dai landmark e' degenere, si usa
+            # il ritaglio centrale della mano come ripiego.
             central_palm_roi = extract_central_palm_roi(hand_img, coords)
-            if valid_image(central_palm_roi):
-                palm_roi_processed = preprocess_rgb(central_palm_roi, sigma=20, clahe_clip=1.8)
-                palm_roi_processed = resize_with_crop_fill(palm_roi_processed, target_size=PALM_ROI_SIZE)
-                save_image(out_folder / f"{base_name}_palm_roi.png", palm_roi_processed)
+            if not valid_image(central_palm_roi):
+                palm_roi_fallback = True
+                central_palm_roi = _center_crop(hand_img, 0.6)
+                warnings.append("palm_roi da fallback (ROI da landmark degenere)")
 
-            knuckle_rois = extract_all_knuckle_rois(hand_img, coords)
+            palm_roi_processed = preprocess_rgb(central_palm_roi, sigma=20, clahe_clip=1.8)
+            palm_roi_processed = resize_with_crop_fill(palm_roi_processed, target_size=PALM_ROI_SIZE)
+            if not save_image(out_folder / f"{base_name}_palm_roi.png", palm_roi_processed):
+                return {"status": "error", "file": str(img_path), "reason": "Scrittura palm_roi fallita"}
+
+            knuckle_rois = extract_all_knuckle_rois(hand_img, coords, bg_color=bg_color)
             for roi_name, knuckle in knuckle_rois.items():
                 if valid_image(knuckle):
                     knuckle_processed = preprocess_knuckle(knuckle)
@@ -664,9 +780,10 @@ def process_single_image(task):
             # DORSO
             dorsal_hand_processed = preprocess_rgb(hand_img, sigma=25, clahe_clip=1.5)
             dorsal_hand_processed = resize_with_crop_fill(dorsal_hand_processed, target_size=DORSAL_HAND_SIZE)
-            save_image(out_folder / f"{base_name}_dorsal_hand.png", dorsal_hand_processed)
+            if not save_image(out_folder / f"{base_name}_dorsal_hand.png", dorsal_hand_processed):
+                return {"status": "error", "file": str(img_path), "reason": "Scrittura dorsal_hand fallita"}
 
-            knuckle_rois = extract_all_knuckle_rois(hand_img, coords)
+            knuckle_rois = extract_all_knuckle_rois(hand_img, coords, bg_color=bg_color)
             for roi_name, knuckle in knuckle_rois.items():
                 if valid_image(knuckle):
                     knuckle_processed = preprocess_rgb(knuckle, sigma=15, clahe_clip=1.5)
@@ -681,6 +798,10 @@ def process_single_image(task):
             "is_dorsal": is_dorsal,
             "mirrored_to_canonical": was_mirrored,
             "handedness_confidence": round(handedness_score, 4),
+            "detection_attempt": attempt,
+            "background_color_bgr": list(bg_color),
+            "palm_roi_fallback": palm_roi_fallback,
+            "warnings": warnings,
             "quality": quality,
             "original_hand_bbox": original_bbox,
             "landmarks_original": coords_original.tolist(),
@@ -690,7 +811,7 @@ def process_single_image(task):
         with open(out_folder / f"{base_name}_metadata.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
 
-        return {"status": "success", "file": str(img_path)}
+        return {"status": "success", "file": str(img_path), "attempt": attempt, "warnings": warnings}
 
     except Exception as e:
         return {"status": "error", "file": str(img_path), "reason": str(e)}
@@ -749,11 +870,17 @@ def run_async_preprocessing(participants_dir, output_dir, max_workers=4, chunksi
     skipped = 0
     errors = 0
     skip_reasons = {}
+    attempts = {}
+    n_warn = 0
 
     with ProcessPoolExecutor(max_workers=max_workers, initializer=init_worker) as executor:
         for result in executor.map(process_single_image, tasks, chunksize=chunksize):
             if result["status"] == "success":
                 success += 1
+                attempts[result.get("attempt")] = attempts.get(result.get("attempt"), 0) + 1
+                if result.get("warnings"):
+                    n_warn += 1
+                    print(f"[WARN] {result['file']}: {'; '.join(result['warnings'])}")
             elif result["status"] == "skipped":
                 skipped += 1
                 skip_reasons[result["reason"]] = skip_reasons.get(result["reason"], 0) + 1
@@ -763,7 +890,9 @@ def run_async_preprocessing(participants_dir, output_dir, max_workers=4, chunksi
                 print(f"[ERROR] {result['file']}: {result['reason']}")
 
     print("\n==============================")
-    print(f"SUCCESS: {success}")
+    print(f"SUCCESS: {success}  (con warning: {n_warn})")
+    for att, count in sorted(attempts.items(), key=lambda x: -x[1]):
+        print(f"   - rilevata con {att}: {count}")
     print(f"SKIPPED: {skipped}")
     for reason, count in sorted(skip_reasons.items(), key=lambda x: -x[1]):
         print(f"   - {reason}: {count}")
@@ -773,7 +902,7 @@ def run_async_preprocessing(participants_dir, output_dir, max_workers=4, chunksi
 
 if __name__ == "__main__":
     PARTICIPANTS_DIR = r"D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants"
-    OUTPUT_DIR = r"D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed"
+    OUTPUT_DIR = r"D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION"
     NUM_WORKERS = os.cpu_count() or 4
 
     run_async_preprocessing(PARTICIPANTS_DIR, OUTPUT_DIR, max_workers=NUM_WORKERS, chunksize=8)

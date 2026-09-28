@@ -37,7 +37,7 @@ RIASSUNTO:
 
 TODO: !!!!
 
-
+1- Sarebbe interessante capire se le identità che sbaglia sul dorso sono giuste sul palmo e viceversa, per capire se i due stream sono complementari
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
      - sulle singole componenti del palmar:
@@ -55,16 +55,106 @@ TODO: !!!!
 
 Comandi esecuzione: 
 
-Ora si sta provando: 
+python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache_mew_dataset.npz" --batch_size 16
 
+SI STA ESEGUENDO:
+python palm_run_new_dataset.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache_mew_dataset.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
+
+---------------------------------------------------------------------------------------------------------------
+Per open-set eseguito usando i modelli trainati su 11k hands e per test il nuovo dataset HandDx-200: 
+ python multimodal_fusional_new_dataset_id_openset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --augmented_raw_dir "D:\Users\Patrizio\Desktop\Tesi\augmented_raw" --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --out_dir "D:\Users\Patrizio\Desktop\Tesi\run_results_v4" --palm_checkpoint models_final/palm_embedding_final.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final.pt --calibrate_alpha_for_rank --rank_kfold 5 --gallery_holdout_real 1 --openset_repeats 10 --openset_known_fraction 0.5 --openset_cal_fraction 0.5 --openset_target_fpirs 0.01,0.05,0.10 --openset_unknown_samples real
+
+  Abbiamo così:
+    - 99 soggetti conosciuti (99 sx e 99 dx)
+    - unknown_cal: 50 (mai iscritti, usati solo per scegliere la soglia)
+    - unknown_test: 50  (mai iscritti, usati solo per misurare gli errori)
+
+    Un probe di mano sinistra viene confrontato con le 99 mani sinistre in gallery, uno di mano destra con le 99 destre. Ogni probe ha quindi 99 candidati.
+
+    Gruppo	Probe	Confronti
+    Genuini (known)	198	198 × 99 = 19.602
+    unknown_cal	100	100 × 99 = 9.900
+    unknown_test	98	98 × 99 = 9.702
+========================================================================
+IDENTIFICAZIONE OPEN-SET
+========================================================================
+Split ripetuti: 10 | soggetti totali: 198 | known=99, unknown_cal=50, unknown_test=49 (per split)
+Probe unknown: scatti 'real' | alpha fusione: 0.15 | score_norm: zscore
+Soglia = FPIR-obiettivo calibrato su unknown_cal, valutato su unknown_test (soggetti disgiunti). [oracle] = soglia scelta su unknown_test (ottimistica).
+Valori: media±std sugli split, in %.
+
+[PALM] probe genuini reali+augmentati (~198 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=1.0000±0.0000 | Open-set EER=0.00±0.00
+   FPIR-obiettivo 1%: FPIR_test=1.02±1.88 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.946±0.005 | [oracle DIR@1=100.00±0.00]
+   FPIR-obiettivo 5%: FPIR_test=3.67±3.85 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.934±0.005 | [oracle DIR@1=100.00±0.00]
+   FPIR-obiettivo 10%: FPIR_test=9.80±7.35 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.921±0.005 | [oracle DIR@1=100.00±0.00]
+
+[PALM] probe genuini SOLO reali (~0 probe genuini/split)
+   n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+[DORSAL] probe genuini reali+augmentati (~198 probe genuini/split)
+   Rank-1 (solo known)=96.67±1.63 | AUC known-vs-unknown=0.9711±0.0085 | Open-set EER=7.31±1.44
+   FPIR-obiettivo 1%: FPIR_test=1.63±1.22 | DIR@1=90.61±1.43 | FRR_known=9.29±1.41 | misid=0.10±0.30 | soglia=0.977±0.001 | [oracle DIR@1=90.81±1.53]
+   FPIR-obiettivo 5%: FPIR_test=4.49±3.51 | DIR@1=92.02±1.46 | FRR_known=7.68±1.51 | misid=0.30±0.46 | soglia=0.975±0.001 | [oracle DIR@1=92.22±1.57]
+   FPIR-obiettivo 10%: FPIR_test=9.59±5.85 | DIR@1=92.53±1.37 | FRR_known=6.97±1.39 | misid=0.51±0.51 | soglia=0.972±0.002 | [oracle DIR@1=92.53±1.44]
+
+[DORSAL] probe genuini SOLO reali (~0 probe genuini/split)
+   n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+[FUSED] probe genuini reali+augmentati (~198 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9863±0.0067 | Open-set EER=3.76±1.09
+   FPIR-obiettivo 1%: FPIR_test=1.63±2.55 | DIR@1=95.76±1.26 | FRR_known=4.24±1.26 | misid=0.00±0.00 | soglia=1.652±0.029 | [oracle DIR@1=95.66±0.91]
+   FPIR-obiettivo 5%: FPIR_test=6.33±4.23 | DIR@1=96.26±1.02 | FRR_known=3.74±1.02 | misid=0.00±0.00 | soglia=1.586±0.021 | [oracle DIR@1=96.36±1.03]
+   FPIR-obiettivo 10%: FPIR_test=13.06±6.47 | DIR@1=96.77±0.76 | FRR_known=3.23±0.76 | misid=0.00±0.00 | soglia=1.556±0.031 | [oracle DIR@1=96.57±1.21]
+
+[FUSED] probe genuini SOLO reali (~0 probe genuini/split)
+   n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+-----------------------------------------------------------------------------------------------------
+
+Eseguito test con modelli trainati su 11k hands e testati usando il nuovo dataset HandDx-200:
 python multimodal_fusional_new_dataset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --augmented_raw_dir "D:\Users\Patrizio\Desktop\Tesi\augmented_raw" --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --out_dir "D:\Users\Patrizio\Desktop\Tesi\run_results_v4" --palm_checkpoint models_final/palm_embedding_final.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final.pt --calibrate_alpha_for_rank --rank_kfold 5 --gallery_holdout_real 1
+Per avere un numero maggiore di coppie impost:
+
+========================================================================
+VERIFICA 1:1
+========================================================================
+Protocollo genuine usato: same_hand_multi_sample
+Coppie genuine:  396
+Coppie impostor: 312048
+Alpha:            0.50
+    palm: EER=0.00% | AUC=1.0000 | Acc@EER=100.00% | Acc@0.55=17.20%
+  dorsal: EER=2.52% | AUC=0.9973 | Acc@EER=97.49% | Acc@0.55=0.13%
+   fused: EER=0.02% | AUC=1.0000 | Acc@EER=99.95% | Acc@0.55=73.21%  [scala non comparabile, vedi note]
+
+[IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+Protocollo identificazione usato: same_hand_multi_sample_meanenroll
+Alpha usato per l'identificazione: 0.10
+    palm: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(aug)=100.00%
+           margine medio top1-top2: 0.1183
+  dorsal: Rank-1=95.45% | Rank-5=98.99% | Rank-10=98.99% | MRR=0.9691 | Rank-1(aug)=95.45%
+           margine medio top1-top2: 0.0371 (quando sbagliato: 0.0041)
+   fused: Rank-1=97.98% | Rank-5=100.00% | Rank-10=100.00% | MRR=0.9863 | Rank-1(aug)=97.98%
+           margine medio top1-top2: 0.7892 (quando sbagliato: 0.0295)
+
+
+-----------------------------------------------------
+RISULTATI: 
+python multimodal_fusional_new_dataset.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --augmented_raw_dir "D:\Users\Patrizio\Desktop\Tesi\augmented_raw" --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --out_dir "D:\Users\Patrizio\Desktop\Tesi\run_results_v4" --palm_checkpoint models_final/palm_embedding_final.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final.pt --calibrate_alpha_for_rank --rank_kfold 5 --gallery_holdout_real 1
+
+Sta facendo data_augmentation dei campioni originali per avere un'altra immagine genuina per soggetto in modo da usarla nell'esecuzione, 
+sull'immagine che viene creata dalla data augmentation verrà applicato il preprocessing e salvato, in modo che nei run successivi non lo esegua usando --skip_preprocessing
+In particolare:
+- Rotazione casuale: angolo uniforme tra -8° e +8° (resample bicubico, expand=False, quindi le dimensioni restano invariate e agli angoli può comparire un piccolo bordo).
+- Jitter di luminosità: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Brightness).
+- Jitter di contrasto: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Contrast).
+- Piccola traslazione (shift): dx, dy interi casuali entro ±3% della larghezza/altezza dell'immagine (resample bicubico via Image.AFFINE).
 
 Per identificazione:
 Si creano per ogni soggetto: 2 mani x 1 coppia = 2 coppie geniuine per soggetto (sarebbe 1 reale e una augmentata)
 Per le coppie impostor, si creano 792 coppie, ma le mescola e ne tiene casualmente solo 396 
 
 Vengono fatte 396 coppie genuine e 396 impostori -> 792 verifiche 1:1
-
 
 Per verifica: 
 Ogni probe invece viene confrontato con con 198 candidati -> tutte le altre identità filtrate per soggetto e mano, dello stesso lato sx o dx del prob -> è un identificazione 1:198
@@ -92,15 +182,11 @@ Alpha usato per l'identificazione: 0.10
            margine medio top1-top2: 0.0371 (quando sbagliato: 0.0041)
    fused: Rank-1=97.47% | Rank-5=100.00% | Rank-10=100.00% | MRR=0.9838 | Rank-1(aug)=97.47%
            margine medio top1-top2: 0.5908 (quando sbagliato: 0.0218)
+-----------------------------------------------------
 
 
-Sta facendo data_augmentation dei campioni originali per avere un'altra immagine genuina per soggetto in modo da usarla nell'esecuzione, 
-sull'immagine che viene creata dalla data augmentation verrà applicato il preprocessing e salvato, in modo che nei run successivi non lo esegua usando --skip_preprocessing
-In particolare:
-- Rotazione casuale: angolo uniforme tra -8° e +8° (resample bicubico, expand=False, quindi le dimensioni restano invariate e agli angoli può comparire un piccolo bordo).
-- Jitter di luminosità: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Brightness).
-- Jitter di contrasto: fattore uniforme tra 0.85 e 1.15 (ImageEnhance.Contrast).
-- Piccola traslazione (shift): dx, dy interi casuali entro ±3% della larghezza/altezza dell'immagine (resample bicubico via Image.AFFINE).
+
+
 
 
 ----------------------------------------
