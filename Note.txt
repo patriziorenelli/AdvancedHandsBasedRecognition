@@ -55,10 +55,21 @@ TODO: !!!!
 
 Comandi esecuzione: 
 
+
+PROVARE ORA LA PIPELINE MULTIBIOMETRICA USANDO I MODELLI TRAINATI SU new_dataset usando il dataset 11k Hands
+
+Ricalcolata cache swin
+python precompute_swin_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\swin_cache_new_dataset.npz"            
+Ricalcolato embedding nocche
+python precompute_knuckle_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --out "D:\Users\Patrizio\Desktop\Tesi\knuckle_cache_new_dataset.npz"            
+Ricalcolati vit per new dataset
 python precompute_vit_embeddings.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --out "D:\Users\Patrizio\Desktop\Tesi\vit_cache_mew_dataset.npz" --batch_size 16
 
-SI STA ESEGUENDO:
-python palm_run_new_dataset.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache_mew_dataset.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
+python dorsal_run_new_dataset.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --epochs 60 --freeze_mobilenet true --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache_new_dataset.npz" --knuckle_cache_path "D:\Users\Patrizio\Desktop\Tesi\knuckle_cache_new_dataset.npz"
+
+python palm_run_new_dataset.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache_mew_dataset.npz" --early_stopping_patience 15 --num_workers 2 --batch_size 32
+
+
 
 ---------------------------------------------------------------------------------------------------------------
 Per open-set eseguito usando i modelli trainati su 11k hands e per test il nuovo dataset HandDx-200: 

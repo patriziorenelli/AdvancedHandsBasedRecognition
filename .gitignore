@@ -19,3 +19,5 @@ log_nested_cv_palm/palm_outer_fold_01.pt
 log_nested_cv_palm/palm_outer_fold_02.pt
 log_nested_cv_palm/palm_outer_fold_03.pt
 log_nested_cv_palm/palm_outer_fold_04.pt
+models_final/dorsal_embedding_final_new_dataset.pt
+models_final/palm_embedding_final_new_dataset.pt
