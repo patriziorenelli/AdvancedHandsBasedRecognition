@@ -1,0 +1,115 @@
+========================================================================
+RISULTATI NUOVO DATASET - PALMO + DORSO (v4)
+========================================================================
+
+Protocollo verifica:       same_hand_multi_sample
+Protocollo identificazione: same_hand_multi_sample_meanenroll
+
+Soggetti utilizzabili: 164
+Campioni multimodali: 4005
+Alpha fusione: 0.50
+Soglia verifica fissa: 0.5500
+
+VERIFICATION 1:1
+------------------------------------------------------------------------
+
+PALM
+  EER:                    27.1148%
+  EER threshold:          0.890126
+  ROC-AUC:                0.805023
+  Accuracy @ EER thresh:  72.8852%
+  Accuracy @ 0.55: 6.0176%
+  TAR @ FAR 1%:           36.0798%
+  TAR @ FAR 5%:           50.8978%
+  TAR @ FAR 10%:          58.9830%
+
+DORSAL
+  EER:                    24.4819%
+  EER threshold:          0.783545
+  ROC-AUC:                0.824713
+  Accuracy @ EER thresh:  75.5184%
+  Accuracy @ 0.55: 18.5791%
+  TAR @ FAR 1%:           42.5139%
+  TAR @ FAR 5%:           56.9314%
+  TAR @ FAR 10%:          64.4618%
+
+FUSED
+  EER:                    22.1350%
+  EER threshold:          0.525784
+  ROC-AUC:                0.854657
+  Accuracy @ EER thresh:  77.8650%
+  Accuracy @ 0.55: 78.9689%
+  TAR @ FAR 1%:           47.3295%
+  TAR @ FAR 5%:           61.3203%
+  TAR @ FAR 10%:          68.6210%
+  NOTA SCALA: Punteggi z-normalizzati: la soglia fissa non e' direttamente comparabile con quella di palm/dorsal (scala coseno grezzo). Usa eer_threshold_metrics per confronti tra sistemi.
+
+IDENTIFICATION 1:N
+------------------------------------------------------------------------
+
+PALM
+  Rank-1:  55.6923%
+  Rank-5:  73.5385%
+  Rank-10: 79.3846%
+  MRR:     0.639247
+  Rank-1 (probe reali):      55.6923%
+  Margine medio top1-top2:   0.0133
+
+DORSAL
+  Rank-1:  56.9231%
+  Rank-5:  74.7692%
+  Rank-10: 84.0000%
+  MRR:     0.657826
+  Rank-1 (probe reali):      56.9231%
+  Margine medio top1-top2:   0.0284
+
+FUSED
+  Rank-1:  72.6154%
+  Rank-5:  87.3846%
+  Rank-10: 92.6154%
+  MRR:     0.800424
+  Rank-1 (probe reali):      72.6154%
+  Margine medio top1-top2:   0.2656
+
+IDENTIFICATION OPEN-SET
+------------------------------------------------------------------------
+Split ripetuti: 10 | soggetti totali: 164 | known=82, unknown_cal=41, unknown_test=41 (per split)
+Probe unknown: scatti 'real' | alpha fusione: 0.50 | score_norm: zscore
+Soglia = FPIR-obiettivo calibrato su unknown_cal, valutato su unknown_test (soggetti disgiunti). [oracle] = soglia scelta su unknown_test (ottimistica).
+Valori: media±std sugli split, in %.
+
+[PALM] probe genuini reali+augmentati (~162 probe genuini/split)
+   Rank-1 (solo known)=63.36±3.99 | AUC known-vs-unknown=0.6301±0.0357 | Open-set EER=51.31±1.64
+   FPIR-obiettivo 1%: FPIR_test=1.54±1.27 | DIR@1=11.56±2.95 | FRR_known=87.89±3.08 | misid=0.55±0.58 | soglia=0.979±0.002 | [oracle DIR@1=10.38±3.87]
+   FPIR-obiettivo 5%: FPIR_test=5.29±1.97 | DIR@1=19.78±2.35 | FRR_known=78.55±2.55 | misid=1.67±0.68 | soglia=0.974±0.001 | [oracle DIR@1=19.04±3.63]
+   FPIR-obiettivo 10%: FPIR_test=10.11±2.89 | DIR@1=24.85±2.66 | FRR_known=71.20±2.69 | misid=3.95±1.40 | soglia=0.970±0.001 | [oracle DIR@1=25.09±3.23]
+
+[PALM] probe genuini SOLO reali (~162 probe genuini/split)
+   Rank-1 (solo known)=63.36±3.99 | AUC known-vs-unknown=0.6301±0.0357 | Open-set EER=51.31±1.64
+   FPIR-obiettivo 1%: FPIR_test=1.54±1.27 | DIR@1=11.56±2.95 | FRR_known=87.89±3.08 | misid=0.55±0.58 | soglia=0.979±0.002 | [oracle DIR@1=10.38±3.87]
+   FPIR-obiettivo 5%: FPIR_test=5.29±1.97 | DIR@1=19.78±2.35 | FRR_known=78.55±2.55 | misid=1.67±0.68 | soglia=0.974±0.001 | [oracle DIR@1=19.04±3.63]
+   FPIR-obiettivo 10%: FPIR_test=10.11±2.89 | DIR@1=24.85±2.66 | FRR_known=71.20±2.69 | misid=3.95±1.40 | soglia=0.970±0.001 | [oracle DIR@1=25.09±3.23]
+
+[DORSAL] probe genuini reali+augmentati (~162 probe genuini/split)
+   Rank-1 (solo known)=62.80±2.67 | AUC known-vs-unknown=0.6363±0.0260 | Open-set EER=50.61±2.31
+   FPIR-obiettivo 1%: FPIR_test=1.36±0.81 | DIR@1=14.89±2.20 | FRR_known=84.86±2.35 | misid=0.25±0.30 | soglia=0.951±0.003 | [oracle DIR@1=14.21±2.10]
+   FPIR-obiettivo 5%: FPIR_test=5.17±2.41 | DIR@1=25.77±2.71 | FRR_known=73.30±3.15 | misid=0.93±0.93 | soglia=0.939±0.002 | [oracle DIR@1=27.07±3.43]
+   FPIR-obiettivo 10%: FPIR_test=9.56±3.37 | DIR@1=32.08±2.02 | FRR_known=65.76±2.75 | misid=2.16±1.15 | soglia=0.933±0.003 | [oracle DIR@1=32.45±2.15]
+
+[DORSAL] probe genuini SOLO reali (~162 probe genuini/split)
+   Rank-1 (solo known)=62.80±2.67 | AUC known-vs-unknown=0.6363±0.0260 | Open-set EER=50.61±2.31
+   FPIR-obiettivo 1%: FPIR_test=1.36±0.81 | DIR@1=14.89±2.20 | FRR_known=84.86±2.35 | misid=0.25±0.30 | soglia=0.951±0.003 | [oracle DIR@1=14.21±2.10]
+   FPIR-obiettivo 5%: FPIR_test=5.17±2.41 | DIR@1=25.77±2.71 | FRR_known=73.30±3.15 | misid=0.93±0.93 | soglia=0.939±0.002 | [oracle DIR@1=27.07±3.43]
+   FPIR-obiettivo 10%: FPIR_test=9.56±3.37 | DIR@1=32.08±2.02 | FRR_known=65.76±2.75 | misid=2.16±1.15 | soglia=0.933±0.003 | [oracle DIR@1=32.45±2.15]
+
+[FUSED] probe genuini reali+augmentati (~162 probe genuini/split)
+   Rank-1 (solo known)=80.60±2.96 | AUC known-vs-unknown=0.6946±0.0278 | Open-set EER=41.06±1.75
+   FPIR-obiettivo 1%: FPIR_test=1.13±0.83 | DIR@1=22.56±2.66 | FRR_known=77.32±2.88 | misid=0.12±0.25 | soglia=1.710±0.021 | [oracle DIR@1=22.25±2.19]
+   FPIR-obiettivo 5%: FPIR_test=5.15±2.21 | DIR@1=33.07±3.24 | FRR_known=66.07±3.39 | misid=0.87±0.63 | soglia=1.619±0.019 | [oracle DIR@1=33.62±3.35]
+   FPIR-obiettivo 10%: FPIR_test=9.85±2.51 | DIR@1=38.75±3.69 | FRR_known=60.01±3.81 | misid=1.24±0.73 | soglia=1.560±0.013 | [oracle DIR@1=38.75±3.29]
+
+[FUSED] probe genuini SOLO reali (~162 probe genuini/split)
+   Rank-1 (solo known)=80.60±2.96 | AUC known-vs-unknown=0.6946±0.0278 | Open-set EER=41.06±1.75
+   FPIR-obiettivo 1%: FPIR_test=1.13±0.83 | DIR@1=22.56±2.66 | FRR_known=77.32±2.88 | misid=0.12±0.25 | soglia=1.710±0.021 | [oracle DIR@1=22.25±2.19]
+   FPIR-obiettivo 5%: FPIR_test=5.15±2.21 | DIR@1=33.07±3.24 | FRR_known=66.07±3.39 | misid=0.87±0.63 | soglia=1.619±0.019 | [oracle DIR@1=33.62±3.35]
+   FPIR-obiettivo 10%: FPIR_test=9.85±2.51 | DIR@1=38.75±3.69 | FRR_known=60.01±3.81 | misid=1.24±0.73 | soglia=1.560±0.013 | [oracle DIR@1=38.75±3.29]
