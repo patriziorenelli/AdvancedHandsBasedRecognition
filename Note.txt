@@ -61,6 +61,8 @@ SI VUOLE CREARE UNA VERSIONE DI MULTIMODAL CHE SFRUTTI I MODELLI TRENATI SU 11K 
 !!!   !!!!    !!!!!!    !!!!!!!     !!!!!!!   !!!!!   !!!!!!
 
 DA ESEGUIRE: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed_11kHands_copy" --dataset_pre "new_dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
+
+
 --------------------------------------------------------------------
 Si sta provando la pipeline multibiometrica usando modelli trainati su new_dataset usando per i test dataset 11k Hands
 
@@ -90,6 +92,7 @@ Alpha:            0.50
 ========================================================================
 IDENTIFICAZIONE 1:N
 ========================================================================
+
 
 [IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
 Protocollo identificazione usato: same_hand_multi_sample_meanenroll
