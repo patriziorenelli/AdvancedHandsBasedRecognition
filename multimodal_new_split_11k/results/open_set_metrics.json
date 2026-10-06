@@ -1,0 +1,443 @@
+{
+  "protocol": {
+    "split": "fixed (held-out enrolled = known, validation = unknown_cal, held-out unknown = unknown_test)",
+    "n_known_subjects": 20,
+    "n_unknown_cal_subjects": 16,
+    "n_unknown_test_subjects": 21,
+    "target_fpirs": [
+      0.01,
+      0.05,
+      0.1
+    ],
+    "unknown_samples": "real",
+    "gallery_holdout_real": 1,
+    "alpha": 0.5,
+    "score_normalization": "zscore",
+    "threshold_policy": "calibrata su soggetti di validation (FPIR-obiettivo), valutata su held-out unknown"
+  },
+  "result": {
+    "sizes": {
+      "n_known_subjects": 20,
+      "n_unknown_cal_subjects": 16,
+      "n_unknown_test_subjects": 21,
+      "n_gallery_identities": 40,
+      "n_genuine_probes": 40,
+      "n_unknown_cal_probes": 463,
+      "n_unknown_test_probes": 470
+    },
+    "palm": {
+      "all": {
+        "n_genuine_probes": 40,
+        "rank1_known": 0.925,
+        "detection_auc": 0.9655851063829787,
+        "open_set_eer": 0.09999999999999998,
+        "open_set_eer_threshold": 0.5146715882512515,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 0.6132029043167602,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.875,
+            "dir_rank5": 0.875,
+            "fnir": 0.125,
+            "false_reject_known": 0.125,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 0.5471375403668844,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025
+          },
+          "fpir_10pct": {
+            "threshold": 0.5145340874766051,
+            "fpir": 0.1,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 0.6212472907354526,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.875,
+            "dir_rank5": 0.875,
+            "fnir": 0.125,
+            "false_reject_known": 0.125,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 0.5585049694328333,
+            "fpir": 0.036170212765957444,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 0.5238349422296992,
+            "fpir": 0.08297872340425531,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      },
+      "real_only": {
+        "n_genuine_probes": 40,
+        "rank1_known": 0.925,
+        "detection_auc": 0.9655851063829787,
+        "open_set_eer": 0.09999999999999998,
+        "open_set_eer_threshold": 0.5146715882512515,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 0.6132029043167602,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.875,
+            "dir_rank5": 0.875,
+            "fnir": 0.125,
+            "false_reject_known": 0.125,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 0.5471375403668844,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025
+          },
+          "fpir_10pct": {
+            "threshold": 0.5145340874766051,
+            "fpir": 0.1,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 0.6212472907354526,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.875,
+            "dir_rank5": 0.875,
+            "fnir": 0.125,
+            "false_reject_known": 0.125,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 0.5585049694328333,
+            "fpir": 0.036170212765957444,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 0.5238349422296992,
+            "fpir": 0.08297872340425531,
+            "dir_rank1": 0.9,
+            "dir_rank5": 0.925,
+            "fnir": 0.09999999999999998,
+            "false_reject_known": 0.075,
+            "misidentified": 0.025,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      }
+    },
+    "dorsal": {
+      "all": {
+        "n_genuine_probes": 40,
+        "rank1_known": 1.0,
+        "detection_auc": 0.9922872340425531,
+        "open_set_eer": 0.050531914893617025,
+        "open_set_eer_threshold": 0.542901168744975,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 0.61991445067335,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 0.544587391482697,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0
+          },
+          "fpir_10pct": {
+            "threshold": 0.5016517103066592,
+            "fpir": 0.1,
+            "dir_rank1": 0.975,
+            "dir_rank5": 0.975,
+            "fnir": 0.025000000000000022,
+            "false_reject_known": 0.025,
+            "misidentified": 0.0
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 0.6878753137266317,
+            "fpir": 0.00425531914893617,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 0.6318451577017276,
+            "fpir": 0.006382978723404255,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 0.5938161928618514,
+            "fpir": 0.02127659574468085,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      },
+      "real_only": {
+        "n_genuine_probes": 40,
+        "rank1_known": 1.0,
+        "detection_auc": 0.9922872340425531,
+        "open_set_eer": 0.050531914893617025,
+        "open_set_eer_threshold": 0.542901168744975,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 0.61991445067335,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 0.544587391482697,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0
+          },
+          "fpir_10pct": {
+            "threshold": 0.5016517103066592,
+            "fpir": 0.1,
+            "dir_rank1": 0.975,
+            "dir_rank5": 0.975,
+            "fnir": 0.025000000000000022,
+            "false_reject_known": 0.025,
+            "misidentified": 0.0
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 0.6878753137266317,
+            "fpir": 0.00425531914893617,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 0.6318451577017276,
+            "fpir": 0.006382978723404255,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 0.5938161928618514,
+            "fpir": 0.02127659574468085,
+            "dir_rank1": 0.925,
+            "dir_rank5": 0.925,
+            "fnir": 0.07499999999999996,
+            "false_reject_known": 0.075,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      }
+    },
+    "fused": {
+      "all": {
+        "n_genuine_probes": 40,
+        "rank1_known": 1.0,
+        "detection_auc": 0.9987765957446808,
+        "open_set_eer": 0.02526595744680854,
+        "open_set_eer_threshold": 2.2084435860986065,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 2.3901442202739935,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 2.0492156577863274,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0
+          },
+          "fpir_10pct": {
+            "threshold": 1.8359988817619501,
+            "fpir": 0.1,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 2.356096921702618,
+            "fpir": 0.01702127659574468,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 2.078742459863842,
+            "fpir": 0.04468085106382979,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 1.938690394360698,
+            "fpir": 0.07234042553191489,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      },
+      "real_only": {
+        "n_genuine_probes": 40,
+        "rank1_known": 1.0,
+        "detection_auc": 0.9987765957446808,
+        "open_set_eer": 0.02526595744680854,
+        "open_set_eer_threshold": 2.2084435860986065,
+        "oracle": {
+          "fpir_1pct": {
+            "threshold": 2.3901442202739935,
+            "fpir": 0.00851063829787234,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0
+          },
+          "fpir_5pct": {
+            "threshold": 2.0492156577863274,
+            "fpir": 0.04893617021276596,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0
+          },
+          "fpir_10pct": {
+            "threshold": 1.8359988817619501,
+            "fpir": 0.1,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0
+          }
+        },
+        "calibrated": {
+          "fpir_1pct": {
+            "threshold": 2.356096921702618,
+            "fpir": 0.01702127659574468,
+            "dir_rank1": 0.95,
+            "dir_rank5": 0.95,
+            "fnir": 0.050000000000000044,
+            "false_reject_known": 0.05,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.008639308855291577
+          },
+          "fpir_5pct": {
+            "threshold": 2.078742459863842,
+            "fpir": 0.04468085106382979,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.04967602591792657
+          },
+          "fpir_10pct": {
+            "threshold": 1.938690394360698,
+            "fpir": 0.07234042553191489,
+            "dir_rank1": 1.0,
+            "dir_rank5": 1.0,
+            "fnir": 0.0,
+            "false_reject_known": 0.0,
+            "misidentified": 0.0,
+            "fpir_on_calibration_set": 0.09935205183585313
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1328 @@
+"""
+============================================================
+PALM_RUN - Training + Nested K-Fold + Inferenza
+============================================================
+
+Comandi principali:
+
+# (Opzionale) crea/mostra lo split per soggetti TRAIN / VAL / HELD-OUT, condiviso con la
+# pipeline dorso. Se non esiste viene creato in automatico al primo train/nested_cv.
+python subject_split.py --data_dir dataset_preprocessed
+
+# Training finale: usa SOLO train/val dello split (gli HELD-OUT non vengono mai caricati)
+# e salva models_final/palm_embedding_final_new_split.pt
+python palm_run.py train --data_dir dataset_preprocessed --epochs 60
+
+# Nested K-Fold (SOLO sui soggetti non held-out; output in models_final/nested_cv_new_split):
+# Outer K-Fold = stima della generalizzazione in CV
+# Inner K-Fold = selezione iperparametri
+python palm_run.py nested_cv --data_dir dataset_preprocessed \
+    --outer_folds 5 --inner_folds 4 \
+    --inner_epochs 25 --outer_epochs 60 \
+    --lr_grid 0.0001,0.0003 --freeze_mobilenet_grid false,true
+
+# Verifica 1:1
+python palm_run.py verify --checkpoint models_final/palm_embedding_final_new_split.pt \
+    --base1 dataset_preprocessed/0001/0001_palmar_001 \
+    --base2 dataset_preprocessed/0001/0001_palmar_002
+============================================================
+"""
+
+from __future__ import annotations
+import argparse
+import datetime
+import itertools
+import json
+import platform
+import tempfile
+import time
+import uuid
+from pathlib import Path
+
+import cv2
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+
+from palm_core_new_split_11k import (
+    cfg, compute_frit_channels, rgb_transform,
+    PalmEmbeddingNet, ArcMarginHead,
+    PalmBiometricDataset, compute_eer, kfold_subject_splits,
+)
+from subject_split import (
+    get_or_create_split, dev_subjects, assert_disjoint_from_heldout, split_summary,
+)
+
+
+# ============================================================
+# UTILITA'
+# ============================================================
+def set_seed(seed: int):
+    import random
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
+def parse_bool(value: str) -> bool:
+    value = str(value).strip().lower()
+    if value in {"1", "true", "yes", "y"}:
+        return True
+    if value in {"0", "false", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Booleano non valido: {value}")
+
+
+def parse_float_grid(value: str):
+    vals = [float(x.strip()) for x in value.split(",") if x.strip()]
+    if not vals:
+        raise argparse.ArgumentTypeError("La griglia non puo' essere vuota")
+    return vals
+
+
+def parse_bool_grid(value: str):
+    vals = [parse_bool(x) for x in value.split(",") if x.strip()]
+    if not vals:
+        raise argparse.ArgumentTypeError("La griglia non puo' essere vuota")
+    return vals
+
+
+def add_split_args(parser):
+    """Argomenti dello split per soggetti (stessi per train e nested_cv)."""
+    parser.add_argument("--split_file", default=str(cfg.SPLIT_FILE),
+                        help="JSON con train/val/held-out; creato se non esiste, altrimenti caricato "
+                             "(DEVE essere lo stesso file usato dalla pipeline dorso)")
+    parser.add_argument("--heldout_ratio", type=float, default=cfg.HELDOUT_RATIO,
+                        help="quota di soggetti riservata alla valutazione finale (solo alla creazione)")
+    parser.add_argument("--val_ratio", type=float, default=cfg.DEV_VAL_RATIO,
+                        help="quota dei soggetti NON held-out usata come validation (solo alla creazione)")
+    parser.add_argument("--openset_known_ratio", type=float, default=cfg.OPENSET_KNOWN_RATIO,
+                        help="tra gli held-out, quota 'enrolled'; il resto sono sconosciuti open-set "
+                             "(solo alla creazione)")
+    parser.add_argument("--split_seed", type=int, default=cfg.SPLIT_SEED)
+    parser.add_argument("--regenerate_split", action="store_true",
+                        help="ricrea lo split (il file esistente viene salvato come backup). "
+                             "ATTENZIONE: i modelli gia' addestrati non sarebbero piu' coerenti")
+
+
+def load_subject_split(args, run_logger=None):
+    """Carica (o crea) lo split per soggetti, lo stampa e lo scrive nel log del run."""
+    split = get_or_create_split(
+        args.data_dir, args.split_file,
+        heldout_ratio=args.heldout_ratio, val_ratio=args.val_ratio,
+        known_ratio=args.openset_known_ratio, seed=args.split_seed,
+        regenerate=args.regenerate_split,
+    )
+    print(split_summary(split))
+    if run_logger is not None:
+        run_logger.log_event("subject_split", split_file=str(args.split_file), split=split)
+    return split
+
+
+def make_loader(dataset, batch_size, shuffle=False, drop_last=False):
+    # drop_last solo se ci sono almeno batch_size campioni.
+    effective_drop_last = drop_last and len(dataset) >= batch_size
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=cfg.NUM_WORKERS,
+        drop_last=effective_drop_last,
+        pin_memory=torch.cuda.is_available(),
+    )
+
+
+def load_vit_embed_cache(path):
+    """
+    Carica il file prodotto da precompute_vit_embeddings.py: un .npz con
+    - 'paths': array di stringhe (percorsi assoluti dei _palm_hand.png)
+    - 'embeds': array (N, feat_dim) float32
+    Ritorna un dict {percorso: np.ndarray(feat_dim,)}.
+    """
+    data = np.load(path, allow_pickle=True)
+    paths = data["paths"]
+    embeds = data["embeds"]
+    if len(paths) != len(embeds):
+        raise ValueError("Cache ViT corrotta: paths ed embeds hanno lunghezze diverse")
+    return {str(p): embeds[i] for i, p in enumerate(paths)}
+
+
+def save_checkpoint(path, epoch, model, head, optimizer, scheduler,
+                    best_eer, n_knuckles, subject_to_label, extra=None):
+    payload = {
+        "epoch": epoch,
+        "model_state": model.state_dict(),
+        "head_state": head.state_dict(),
+        "optimizer_state": optimizer.state_dict() if optimizer else None,
+        "scheduler_state": scheduler.state_dict() if scheduler else None,
+        "best_eer": best_eer,
+        "n_knuckles": n_knuckles,
+        "subject_to_label": subject_to_label,
+        "embedding_dim": cfg.EMBEDDING_DIM,
+    }
+    if extra:
+        payload.update(extra)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    torch.save(payload, path)
+
+
+def load_checkpoint(path, model, head, optimizer=None, scheduler=None):
+    ckpt = torch.load(path, map_location=cfg.DEVICE)
+    model.load_state_dict(ckpt["model_state"])
+    head.load_state_dict(ckpt["head_state"])
+    if optimizer is not None and ckpt.get("optimizer_state"):
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+    if scheduler is not None and ckpt.get("scheduler_state"):
+        scheduler.load_state_dict(ckpt["scheduler_state"])
+    return ckpt
+
+
+# ============================================================
+# TRAIN / EVALUATE
+# ============================================================
+def train_one_epoch(model, head, loader, optimizer, criterion, device, epoch, log_every=20):
+    model.train()
+    head.train()
+
+    total_loss, total_correct, total_n = 0.0, 0, 0
+    t0 = time.time()
+
+    for step, batch in enumerate(loader):
+        palm_hand = batch["palm_hand"].to(device, non_blocking=True)
+        palm_roi = batch["palm_roi"].to(device, non_blocking=True)
+        knuckles = batch["knuckles"].to(device, non_blocking=True)
+        knuckle_mask = batch["knuckle_mask"].to(device, non_blocking=True)
+        labels = batch["label"].to(device, non_blocking=True)
+
+        optimizer.zero_grad(set_to_none=True)
+        emb = model(palm_hand, palm_roi, knuckles, knuckle_mask)
+        logits = head(emb, labels)
+        loss = criterion(logits, labels)
+        loss.backward()
+
+        trainable = [p for p in model.parameters() if p.requires_grad] + list(head.parameters())
+        torch.nn.utils.clip_grad_norm_(trainable, 5.0)
+        optimizer.step()
+
+        total_loss += loss.item() * labels.size(0)
+        total_correct += (logits.argmax(1) == labels).sum().item()
+        total_n += labels.size(0)
+
+        if step % log_every == 0:
+            print(
+                f"  [epoch {epoch}] step {step}/{len(loader)} "
+                f"loss={loss.item():.4f} acc={total_correct/max(1,total_n):.4f}"
+            )
+
+    return (
+        total_loss / max(1, total_n),
+        total_correct / max(1, total_n),
+        time.time() - t0,
+    )
+
+
+@torch.no_grad()
+def evaluate_open_set(model, loader, device):
+    model.eval()
+    all_emb, all_subj = [], []
+
+    for batch in loader:
+        emb = model(
+            batch["palm_hand"].to(device, non_blocking=True),
+            batch["palm_roi"].to(device, non_blocking=True),
+            batch["knuckles"].to(device, non_blocking=True),
+            batch["knuckle_mask"].to(device, non_blocking=True),
+        )
+        all_emb.append(emb.cpu())
+        all_subj.extend(batch["subject_id"])
+
+    if not all_emb:
+        return None
+    return compute_eer(torch.cat(all_emb, dim=0), all_subj)
+
+
+def build_datasets(data_dir, train_subjects, eval_subjects=None,
+                   n_knuckles_max=None, vit_embed_cache=None):
+    train_ds = PalmBiometricDataset(
+        data_dir, subject_ids=train_subjects, train=True,
+        vit_embed_cache=vit_embed_cache,
+    )
+    eval_ds = None
+    if eval_subjects is not None:
+        eval_ds = PalmBiometricDataset(
+            data_dir, subject_ids=eval_subjects, train=False,
+            vit_embed_cache=vit_embed_cache,
+        )
+
+    if n_knuckles_max is None:
+        candidates = [train_ds.n_knuckles_max]
+        if eval_ds is not None:
+            candidates.append(eval_ds.n_knuckles_max)
+        n_knuckles_max = max(candidates)
+
+    # Stessa dimensionalita' architetturale per tutti i dataset del fold.
+    train_ds.n_knuckles_max = n_knuckles_max
+    if eval_ds is not None:
+        eval_ds.n_knuckles_max = n_knuckles_max
+
+    return train_ds, eval_ds, n_knuckles_max
+
+
+def init_csv_logger(path):
+    """Crea/apre un CSV di log epoca-per-epoca. Ritorna una funzione log_row(dict)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    is_new = not path.exists()
+    f = open(path, "a", newline="", encoding="utf-8")
+    import csv
+    fieldnames = ["epoch", "train_loss", "train_acc", "eval_eer",
+                  "eval_eer_threshold", "lr", "epoch_seconds", "timestamp"]
+    writer = csv.DictWriter(f, fieldnames=fieldnames)
+    if is_new:
+        writer.writeheader()
+
+    def log_row(row):
+        writer.writerow({k: row.get(k, "") for k in fieldnames})
+        f.flush()
+
+    return log_row, f
+
+
+# ============================================================
+# RUN LOGGER (JSON Lines)
+# ============================================================
+class RunLogger:
+    """
+    Logger di run in formato JSON Lines (un evento JSON per riga, facile
+    da leggere/streamare/analizzare con pandas: pd.read_json(path, lines=True)).
+
+    Raccoglie in un unico file:
+      - configurazione/iperparametri del comando lanciato (run_start)
+      - i dati effettivamente usati per train/eval (subject id, n campioni,
+        n classi, n_knuckles, split, ecc.) (dataset)
+      - le metriche epoca-per-epoca durante il training (epoch)
+      - le metriche di valutazione/selezione iperparametri (evaluation)
+      - il risultato finale del run, checkpoint incluso (run_end)
+
+    Non sostituisce il CSV per-epoca gia' presente (init_csv_logger):
+    lo affianca con una traccia strutturata e completa dell'intero run.
+    """
+
+    def __init__(self, path, run_type, config=None):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.run_id = uuid.uuid4().hex[:12]
+        self.run_type = run_type
+        self._file = open(self.path, "a", encoding="utf-8")
+        self.log_event(
+            "run_start",
+            config=config or {},
+            device=str(cfg.DEVICE),
+            python_version=platform.python_version(),
+            torch_version=torch.__version__,
+            cuda_available=torch.cuda.is_available(),
+        )
+
+    def log_event(self, event, **data):
+        record = {
+            "run_id": self.run_id,
+            "run_type": self.run_type,
+            "event": event,
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            **data,
+        }
+        self._file.write(json.dumps(record, default=str) + "\n")
+        self._file.flush()
+        return record
+
+    def close(self, status="completed", **final_data):
+        self.log_event("run_end", status=status, **final_data)
+        self._file.close()
+
+
+def default_run_log_path(subdir="logs", prefix="run"):
+    """Percorso di default per il file di log di un run: logs/<prefix>_<timestamp>_<id>.jsonl"""
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return cfg.FINAL_MODEL_DIR / subdir / f"{prefix}_{ts}_{uuid.uuid4().hex[:6]}.jsonl"
+
+
+def train_model(train_subjects, data_dir, epochs, batch_size, lr,
+                freeze_vit, freeze_mobilenet, seed,
+                eval_subjects=None, verbose=True, select_best_on_eval=True,
+                log_csv_path=None, run_logger=None, run_logger_tag=None,
+                vit_embed_cache=None, early_stopping_patience=0):
+    """
+    Addestra un modello su train_subjects.
+
+    Se eval_subjects e' presente, restituisce anche l'EER open-set.
+    Questa funzione e' riutilizzata sia dal training semplice sia
+    dall'inner/outer loop del Nested K-Fold.
+    """
+    set_seed(seed)
+    device = cfg.DEVICE
+
+    train_ds, eval_ds, n_knuckles = build_datasets(
+        data_dir, train_subjects, eval_subjects, vit_embed_cache=vit_embed_cache
+    )
+    if len(train_ds) == 0:
+        raise RuntimeError("Dataset di training vuoto per questo fold")
+
+    if run_logger is not None:
+        run_logger.log_event(
+            "dataset",
+            tag=run_logger_tag,
+            data_dir=str(data_dir),
+            n_train_subjects=len(train_subjects),
+            train_subjects=list(train_subjects),
+            n_train_samples=len(train_ds),
+            num_classes=train_ds.num_classes,
+            n_knuckles=n_knuckles,
+            n_eval_subjects=len(eval_subjects) if eval_subjects is not None else 0,
+            eval_subjects=list(eval_subjects) if eval_subjects is not None else [],
+            n_eval_samples=len(eval_ds) if eval_ds is not None else 0,
+            hyperparameters={
+                "epochs": epochs, "batch_size": batch_size, "lr": lr,
+                "freeze_vit": freeze_vit, "freeze_mobilenet": freeze_mobilenet,
+                "seed": seed,
+            },
+        )
+
+    train_loader = make_loader(train_ds, batch_size, shuffle=True, drop_last=True)
+    eval_loader = (
+        make_loader(eval_ds, batch_size, shuffle=False)
+        if eval_ds is not None and len(eval_ds) > 0 else None
+    )
+
+    model = PalmEmbeddingNet(
+        n_knuckles,
+        cfg.EMBEDDING_DIM,
+        freeze_vit=freeze_vit,
+        freeze_mobilenet=freeze_mobilenet,
+    ).to(device)
+
+    head = ArcMarginHead(cfg.EMBEDDING_DIM, train_ds.num_classes).to(device)
+
+    trainable = [p for p in model.parameters() if p.requires_grad] + list(head.parameters())
+    optimizer = torch.optim.AdamW(
+        trainable, lr=lr, weight_decay=cfg.WEIGHT_DECAY
+    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(1, epochs)
+    )
+    criterion = nn.CrossEntropyLoss()
+
+    best_eer = float("inf")
+    best_epoch = 0
+    best_model_state = None
+    best_head_state = None
+    epochs_since_improvement = 0
+
+    log_row, log_file = (None, None)
+    if log_csv_path is not None:
+        log_row, log_file = init_csv_logger(log_csv_path)
+
+    for epoch in range(1, epochs + 1):
+        train_loss, train_acc, dt = train_one_epoch(
+            model, head, train_loader, optimizer, criterion, device, epoch
+        )
+        scheduler.step()
+
+        metrics = None
+        improved = False
+        if eval_loader is not None and select_best_on_eval:
+            metrics = evaluate_open_set(model, eval_loader, device)
+            if metrics is not None and metrics["eer"] < best_eer:
+                best_eer = metrics["eer"]
+                best_epoch = epoch
+                best_model_state = {
+                    k: v.detach().cpu().clone()
+                    for k, v in model.state_dict().items()
+                }
+                best_head_state = {
+                    k: v.detach().cpu().clone()
+                    for k, v in head.state_dict().items()
+                }
+                improved = True
+                epochs_since_improvement = 0
+            elif metrics is not None:
+                epochs_since_improvement += 1
+
+        if verbose:
+            msg = (
+                f"Epoch {epoch}/{epochs} - loss={train_loss:.4f} "
+                f"acc={train_acc:.4f} ({dt:.1f}s) "
+                f"lr={scheduler.get_last_lr()[0]:.2e}"
+            )
+            if metrics:
+                msg += (
+                    f" | eval EER={metrics['eer']*100:.2f}% "
+                    f"@thr={metrics['eer_threshold']:.3f}"
+                )
+            print(msg)
+
+        if log_row is not None:
+            log_row({
+                "epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
+                "eval_eer": metrics["eer"] if metrics else "",
+                "eval_eer_threshold": metrics["eer_threshold"] if metrics else "",
+                "lr": scheduler.get_last_lr()[0], "epoch_seconds": round(dt, 2),
+                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            })
+
+        if run_logger is not None:
+            run_logger.log_event(
+                "epoch",
+                tag=run_logger_tag,
+                epoch=epoch, epochs=epochs,
+                train_loss=train_loss, train_acc=train_acc,
+                eval_eer=metrics["eer"] if metrics else None,
+                eval_eer_threshold=metrics["eer_threshold"] if metrics else None,
+                is_best_so_far=bool(metrics is not None and metrics["eer"] == best_eer),
+                lr=scheduler.get_last_lr()[0], epoch_seconds=round(dt, 2),
+            )
+
+        if (early_stopping_patience > 0 and eval_loader is not None
+                and select_best_on_eval and epochs_since_improvement >= early_stopping_patience):
+            if verbose:
+                print(
+                    f"  [early stopping] nessun miglioramento EER da "
+                    f"{epochs_since_improvement} epoche (best epoch={best_epoch}, "
+                    f"best EER={best_eer*100:.2f}%). Interrompo a epoca {epoch}/{epochs}."
+                )
+            if run_logger is not None:
+                run_logger.log_event(
+                    "early_stopping", tag=run_logger_tag,
+                    stopped_at_epoch=epoch, best_epoch=best_epoch, best_eer=best_eer,
+                )
+            break
+
+    if log_file is not None:
+        log_file.close()
+
+    # Con validation ripristiniamo l'epoca migliore.
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        head.load_state_dict(best_head_state)
+        final_metrics = evaluate_open_set(model, eval_loader, device)
+    elif eval_loader is not None:
+        # Nel refit outer l'eval set puo' essere l'outer test:
+        # viene valutato UNA SOLA VOLTA qui, senza influenzare checkpoint/epoche.
+        final_metrics = evaluate_open_set(model, eval_loader, device)
+        best_epoch = epochs
+        best_eer = final_metrics["eer"] if final_metrics is not None else None
+    else:
+        final_metrics = None
+        best_epoch = epochs
+        best_eer = None
+
+    if run_logger is not None:
+        run_logger.log_event(
+            "evaluation",
+            tag=run_logger_tag,
+            best_epoch=best_epoch,
+            best_eer=best_eer,
+            final_eer=final_metrics["eer"] if final_metrics else None,
+            final_eer_threshold=final_metrics["eer_threshold"] if final_metrics else None,
+        )
+
+    return {
+        "model": model,
+        "head": head,
+        "train_ds": train_ds,
+        "n_knuckles": n_knuckles,
+        "metrics": final_metrics,
+        "best_epoch": best_epoch,
+        "best_eer": best_eer,
+    }
+
+
+# ============================================================
+# TRAINING SEMPLICE (compatibilita')
+# ============================================================
+def cmd_train(args):
+    set_seed(cfg.SEED)
+    device = cfg.DEVICE
+    print(f"Device: {device}")
+
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
+    vit_embed_cache = None
+    if args.vit_cache_path:
+        print(f"\nCarico cache embedding ViT da: {args.vit_cache_path}")
+        t0 = time.time()
+        vit_embed_cache = load_vit_embed_cache(args.vit_cache_path)
+        print(
+            f"  -> {len(vit_embed_cache)} embedding caricate in "
+            f"{time.time() - t0:.1f}s (il backbone ViT NON verra' eseguito)"
+        )
+
+    run_log_path = default_run_log_path(prefix="train")
+    run_logger = RunLogger(run_log_path, run_type="train", config=vars(args))
+    print(f"Run log: {run_log_path}")
+
+    split = load_subject_split(args, run_logger)
+    train_subjects, val_subjects = split["train_subjects"], split["val_subjects"]
+    assert_disjoint_from_heldout(train_subjects + val_subjects, split, "train+val")
+    print(
+        f"Soggetti train: {len(train_subjects)} | "
+        f"Soggetti validation (open-set): {len(val_subjects)} | "
+        f"Soggetti HELD-OUT (mai usati): {len(split['heldout_subjects'])}"
+    )
+
+    try:
+        result = train_model(
+            train_subjects=train_subjects,
+            data_dir=args.data_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            freeze_vit=args.freeze_vit,
+            freeze_mobilenet=args.freeze_mobilenet,
+            seed=cfg.SEED,
+            eval_subjects=val_subjects,
+            verbose=True,
+            log_csv_path=cfg.FINAL_MODEL_DIR / "train_log_new_split.csv",
+            run_logger=run_logger,
+            run_logger_tag="simple_train",
+            vit_embed_cache=vit_embed_cache,
+            early_stopping_patience=args.early_stopping_patience,
+        )
+    except Exception as exc:
+        run_logger.close(status="failed", error=str(exc))
+        raise
+
+    model = result["model"]
+    head = result["head"]
+    train_ds = result["train_ds"]
+    best_eer = result["metrics"]["eer"] if result["metrics"] else float("nan")
+
+    final_path = cfg.FINAL_MODEL_DIR / cfg.FINAL_MODEL_NAME
+    save_checkpoint(
+        final_path, result["best_epoch"], model, head,
+        optimizer=None, scheduler=None, best_eer=best_eer,
+        n_knuckles=result["n_knuckles"],
+        subject_to_label=train_ds.subject_to_label,
+        extra={
+            "training_mode": "subject_split_with_heldout",
+            "split_file": str(args.split_file),
+            "split": split,   # train/val/held-out (+ enrolled/unknown) usati per questo modello
+        },
+    )
+
+    run_logger.close(
+        status="completed",
+        checkpoint=str(final_path),
+        best_epoch=result["best_epoch"],
+        best_eer=best_eer,
+    )
+
+    print(f"\nTraining completato. Modello finale: {final_path}")
+    print(f"Soggetti train/val/held-out salvati in: {args.split_file} (e dentro il checkpoint)")
+    print(f"Log completo del run: {run_log_path}")
+    if result["metrics"]:
+        print(
+            f"EER validation open-set: {result['metrics']['eer']*100:.2f}% "
+            f"@thr={result['metrics']['eer_threshold']:.3f}"
+        )
+
+
+# ============================================================
+# NESTED K-FOLD
+# ============================================================
+def make_hyperparameter_grid(args):
+    grid = []
+    for lr, freeze_vit, freeze_mobilenet in itertools.product(
+        args.lr_grid,
+        args.freeze_vit_grid,
+        args.freeze_mobilenet_grid,
+    ):
+        grid.append({
+            "lr": float(lr),
+            "freeze_vit": bool(freeze_vit),
+            "freeze_mobilenet": bool(freeze_mobilenet),
+        })
+    return grid
+
+
+def inner_model_selection(outer_train_subjects, args, outer_fold, run_logger=None,
+                           vit_embed_cache=None):
+    """
+    INNER LOOP:
+    - nessun soggetto dell'outer test entra qui;
+    - per ogni combinazione di iperparametri esegue Inner K-Fold;
+    - seleziona la configurazione con EER medio piu' basso.
+    """
+    candidates = make_hyperparameter_grid(args)
+    candidate_results = []
+
+    print(f"\n[OUTER {outer_fold}] INNER MODEL SELECTION")
+    print(
+        f"  Soggetti disponibili per inner CV: {len(outer_train_subjects)} | "
+        f"candidati: {len(candidates)}"
+    )
+
+    for cand_idx, hp in enumerate(candidates, start=1):
+        print(
+            f"\n  Candidato {cand_idx}/{len(candidates)}: "
+            f"lr={hp['lr']} freeze_vit={hp['freeze_vit']} "
+            f"freeze_mobilenet={hp['freeze_mobilenet']}"
+        )
+
+        fold_eers = []
+        fold_epochs = []
+
+        for inner_fold, inner_train, inner_val in kfold_subject_splits(
+            outer_train_subjects,
+            args.inner_folds,
+            seed=cfg.SEED + outer_fold * 1000 + cand_idx,
+        ):
+            print(
+                f"    [Inner {inner_fold}/{args.inner_folds}] "
+                f"train_subjects={len(inner_train)} "
+                f"val_subjects={len(inner_val)}"
+            )
+
+            result = train_model(
+                train_subjects=inner_train,
+                data_dir=args.data_dir,
+                epochs=args.inner_epochs,
+                batch_size=args.batch_size,
+                lr=hp["lr"],
+                freeze_vit=hp["freeze_vit"],
+                freeze_mobilenet=hp["freeze_mobilenet"],
+                seed=cfg.SEED + outer_fold * 10000 + cand_idx * 100 + inner_fold,
+                eval_subjects=inner_val,
+                verbose=args.verbose_inner,
+                log_csv_path=cfg.FINAL_MODEL_DIR / cfg.NESTED_CV_DIR_NAME /
+                    f"train_log_outer{outer_fold:02d}_cand{cand_idx}_inner{inner_fold}.csv",
+                run_logger=run_logger,
+                run_logger_tag=f"outer{outer_fold}_cand{cand_idx}_inner{inner_fold}",
+                vit_embed_cache=vit_embed_cache,
+                early_stopping_patience=args.early_stopping_patience,
+            )
+
+            metrics = result["metrics"]
+            if metrics is None:
+                raise RuntimeError(
+                    "Impossibile calcolare EER nell'inner fold. "
+                    "Ogni validation fold deve contenere abbastanza campioni per soggetto."
+                )
+
+            fold_eers.append(metrics["eer"])
+            fold_epochs.append(result["best_epoch"])
+
+            print(
+                f"      -> Inner EER={metrics['eer']*100:.2f}% "
+                f"@thr={metrics['eer_threshold']:.3f} "
+                f"(best epoch={result['best_epoch']})"
+            )
+
+            del result
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        mean_eer = float(np.mean(fold_eers))
+        std_eer = float(np.std(fold_eers))
+        mean_epoch = max(1, int(round(np.mean(fold_epochs))))
+
+        candidate_results.append({
+            **hp,
+            "mean_eer": mean_eer,
+            "std_eer": std_eer,
+            "fold_eers": fold_eers,
+            "selected_epochs": fold_epochs,
+            "mean_best_epoch": mean_epoch,
+        })
+
+        print(
+            f"  ==> Candidato {cand_idx}: mean EER={mean_eer*100:.2f}% "
+            f"+/- {std_eer*100:.2f}% | epoch finale suggerita={mean_epoch}"
+        )
+
+        if run_logger is not None:
+            run_logger.log_event(
+                "inner_candidate_result",
+                outer_fold=outer_fold,
+                candidate_index=cand_idx,
+                hyperparameters=hp,
+                mean_eer=mean_eer,
+                std_eer=std_eer,
+                fold_eers=fold_eers,
+                mean_best_epoch=mean_epoch,
+            )
+
+    # Tie-break: prima EER medio, poi deviazione standard.
+    candidate_results.sort(key=lambda x: (x["mean_eer"], x["std_eer"]))
+    best = candidate_results[0]
+
+    print(
+        f"\n  >>> BEST OUTER {outer_fold}: "
+        f"lr={best['lr']} freeze_vit={best['freeze_vit']} "
+        f"freeze_mobilenet={best['freeze_mobilenet']} "
+        f"| inner mean EER={best['mean_eer']*100:.2f}%"
+    )
+
+    return best, candidate_results
+
+
+def cmd_nested_cv(args):
+    """
+    Protocollo Nested K-Fold:
+
+    OUTER:
+        train+validation -----------------> selezione modello nell'INNER
+        test (soggetti mai visti) --------> una sola valutazione finale
+
+    INNER:
+        train/validation per soggetto ----> scelta iperparametri
+
+    IMPORTANTE: l'outer test fold non viene mai usato per scegliere
+    iperparametri, epoche o checkpoint.
+    """
+    set_seed(cfg.SEED)
+    device = cfg.DEVICE
+
+    if args.num_workers is not None:
+        cfg.NUM_WORKERS = args.num_workers
+        print(f"NUM_WORKERS impostato a {cfg.NUM_WORKERS} da CLI")
+
+    # Il nested CV lavora SOLO sui soggetti non held-out (train+val dello split):
+    # gli held-out non vengono mai visti qui.
+    split = load_subject_split(args)
+    all_subjects = dev_subjects(split)
+    assert_disjoint_from_heldout(all_subjects, split, "nested_cv")
+
+    vit_embed_cache = None
+    if args.vit_cache_path:
+        print(f"\nCarico cache embedding ViT da: {args.vit_cache_path}")
+        t0 = time.time()
+        vit_embed_cache = load_vit_embed_cache(args.vit_cache_path)
+        print(
+            f"  -> {len(vit_embed_cache)} embedding caricate in "
+            f"{time.time() - t0:.1f}s (il backbone ViT NON verra' eseguito)"
+        )
+
+    if len(all_subjects) < args.outer_folds:
+        raise ValueError(
+            f"Soggetti ({len(all_subjects)}) < outer_folds ({args.outer_folds})"
+        )
+
+    # Dopo aver rimosso l'outer test deve essere ancora possibile fare l'inner CV.
+    min_outer_train = len(all_subjects) - int(np.ceil(len(all_subjects) / args.outer_folds))
+    if min_outer_train < args.inner_folds:
+        raise ValueError(
+            f"Con {len(all_subjects)} soggetti, outer_folds={args.outer_folds} "
+            f"lascia troppo pochi soggetti per inner_folds={args.inner_folds}."
+        )
+
+    output_dir = cfg.FINAL_MODEL_DIR / cfg.NESTED_CV_DIR_NAME
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    run_log_path = default_run_log_path(subdir=f"{cfg.NESTED_CV_DIR_NAME}/logs", prefix="nested_cv")
+    run_logger = RunLogger(run_log_path, run_type="nested_cv", config=vars(args))
+    run_logger.log_event("subject_split", split_file=str(args.split_file), split=split)
+    run_logger.log_event(
+        "dataset_overview",
+        data_dir=str(args.data_dir),
+        n_subjects=len(all_subjects),
+        subjects=list(all_subjects),
+        n_heldout_excluded=len(split["heldout_subjects"]),
+    )
+
+    print("\n" + "=" * 72)
+    print("NESTED K-FOLD - PALM BIOMETRIC EMBEDDING")
+    print("=" * 72)
+    print(f"Device: {device}")
+    print(f"Soggetti nel nested CV (held-out esclusi): {len(all_subjects)}")
+    print(f"Soggetti HELD-OUT esclusi: {len(split['heldout_subjects'])}")
+    print(f"Outer folds: {args.outer_folds}")
+    print(f"Inner folds: {args.inner_folds}")
+    print(f"Inner epochs: {args.inner_epochs}")
+    print(f"Outer epochs: {args.outer_epochs}")
+    print(f"Output: {output_dir}")
+    print(f"Run log: {run_log_path}")
+
+    outer_results = []
+
+    for outer_fold, outer_train, outer_test in kfold_subject_splits(
+        all_subjects, args.outer_folds, seed=cfg.SEED
+    ):
+        print("\n" + "#" * 72)
+        print(
+            f"OUTER FOLD {outer_fold}/{args.outer_folds} | "
+            f"train+inner={len(outer_train)} | final test={len(outer_test)}"
+        )
+        print("#" * 72)
+
+        # 1) INNER CV: selezione iperparametri.
+        best_hp, all_candidates = inner_model_selection(
+            outer_train, args, outer_fold, run_logger=run_logger,
+            vit_embed_cache=vit_embed_cache,
+        )
+
+        # 2) Refit sul 100% dei soggetti dell'outer training set.
+        #    Il numero di epoche viene dalla media delle best epoch dell'inner CV.
+        final_epochs = (
+            args.outer_epochs if args.outer_epochs is not None
+            else best_hp["mean_best_epoch"]
+        )
+
+        print(
+            f"\n[OUTER {outer_fold}] REFIT finale su {len(outer_train)} soggetti "
+            f"per {final_epochs} epoche"
+        )
+
+        final_result = train_model(
+            train_subjects=outer_train,
+            data_dir=args.data_dir,
+            epochs=final_epochs,
+            batch_size=args.batch_size,
+            lr=best_hp["lr"],
+            freeze_vit=best_hp["freeze_vit"],
+            freeze_mobilenet=best_hp["freeze_mobilenet"],
+            seed=cfg.SEED + outer_fold * 99999,
+            eval_subjects=outer_test,  # SOLO valutazione finale
+            verbose=True,
+            select_best_on_eval=False,   # l'outer test NON influenza il training
+            log_csv_path=cfg.FINAL_MODEL_DIR / cfg.NESTED_CV_DIR_NAME / f"train_log_outer{outer_fold:02d}_refit.csv",
+            run_logger=run_logger,
+            run_logger_tag=f"outer{outer_fold}_refit",
+            vit_embed_cache=vit_embed_cache,
+            # niente early stopping nel refit: select_best_on_eval=False,
+            # l'outer test non deve influenzare in alcun modo il training.
+        )
+
+        test_metrics = final_result["metrics"]
+        if test_metrics is None:
+            raise RuntimeError(f"Impossibile calcolare EER sull'outer fold {outer_fold}")
+
+        fold_path = output_dir / f"palm_outer_fold_{outer_fold:02d}.pt"
+        save_checkpoint(
+            fold_path,
+            final_result["best_epoch"],
+            final_result["model"],
+            final_result["head"],
+            optimizer=None,
+            scheduler=None,
+            best_eer=test_metrics["eer"],
+            n_knuckles=final_result["n_knuckles"],
+            subject_to_label=final_result["train_ds"].subject_to_label,
+            extra={
+                "training_mode": "nested_kfold_outer",
+                "outer_fold": outer_fold,
+                "outer_folds": args.outer_folds,
+                "inner_folds": args.inner_folds,
+                "selected_hyperparameters": best_hp,
+                "outer_test_subjects": outer_test,
+                "split_file": str(args.split_file),
+            },
+        )
+
+        fold_result = {
+            "outer_fold": outer_fold,
+            "n_outer_train_subjects": len(outer_train),
+            "n_outer_test_subjects": len(outer_test),
+            "selected_hyperparameters": best_hp,
+            "all_inner_candidates": all_candidates,
+            "outer_test_metrics": test_metrics,
+            "checkpoint": str(fold_path),
+        }
+        outer_results.append(fold_result)
+
+        run_logger.log_event("outer_fold_result", **fold_result)
+
+        print(
+            f"\n[OUTER {outer_fold}] FINAL TEST (mai usato nell'inner CV): "
+            f"EER={test_metrics['eer']*100:.2f}% "
+            f"@thr={test_metrics['eer_threshold']:.3f}"
+        )
+
+        del final_result
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    eers = np.array([x["outer_test_metrics"]["eer"] for x in outer_results])
+    thresholds = np.array(
+        [x["outer_test_metrics"]["eer_threshold"] for x in outer_results]
+    )
+
+    summary = {
+        "protocol": {
+            "name": "Nested K-Fold subject-disjoint",
+            "outer_folds": args.outer_folds,
+            "inner_folds": args.inner_folds,
+            "seed": cfg.SEED,
+            "selection_metric": "open-set EER",
+            "unit_of_split": "subject_id",
+        },
+        "n_subjects": len(all_subjects),
+        "split_file": str(args.split_file),
+        "n_heldout_excluded": len(split["heldout_subjects"]),
+        "outer_folds": outer_results,
+        "summary": {
+            "mean_outer_eer": float(eers.mean()),
+            "std_outer_eer": float(eers.std()),
+            "min_outer_eer": float(eers.min()),
+            "max_outer_eer": float(eers.max()),
+            "mean_eer_threshold": float(thresholds.mean()),
+        },
+    }
+
+    summary_path = output_dir / "nested_cv_summary.json"
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print("\n" + "=" * 72)
+    print("RISULTATO FINALE NESTED K-FOLD")
+    print("=" * 72)
+    print(
+        f"Outer-test EER medio: {eers.mean()*100:.2f}% "
+        f"+/- {eers.std()*100:.2f}%"
+    )
+    print(f"Min EER: {eers.min()*100:.2f}% | Max EER: {eers.max()*100:.2f}%")
+    print(f"Threshold EER medio (solo descrittivo): {thresholds.mean():.3f}")
+    print(f"Summary JSON: {summary_path}")
+    print(f"Log completo del run: {run_log_path}")
+
+    run_logger.close(status="completed", summary=summary["summary"], summary_json=str(summary_path))
+
+
+# ============================================================
+# INFERENZA / VERIFICA
+# ============================================================
+class PalmVerifier:
+    def __init__(self, checkpoint_path, device=None):
+        self.device = device or cfg.DEVICE
+        ckpt = torch.load(checkpoint_path, map_location=self.device)
+        self.n_knuckles = ckpt["n_knuckles"]
+        self.model = PalmEmbeddingNet(
+            self.n_knuckles,
+            ckpt.get("embedding_dim", cfg.EMBEDDING_DIM),
+            freeze_vit=True,
+        ).to(self.device)
+        self.model.load_state_dict(ckpt["model_state"])
+        self.model.eval()
+        self.rgb_tf = rgb_transform(train=False)
+        print(
+            f"Modello caricato da {checkpoint_path} "
+            f"(epoch {ckpt['epoch']}, best_eer={ckpt.get('best_eer', float('nan')):.4f})"
+        )
+
+    def _load_sample(self, base_path):
+        base_path = Path(base_path)
+        folder, prefix = base_path.parent, base_path.name
+        hand_path = folder / f"{prefix}_palm_hand.png"
+        roi_path = folder / f"{prefix}_palm_roi.png"
+        knuckle_paths = [
+            p for p in sorted(folder.glob(f"{prefix}_palm_*.png"))
+            if p.name not in (hand_path.name, roi_path.name)
+        ]
+
+        if not hand_path.exists() or not roi_path.exists():
+            raise FileNotFoundError(
+                f"File mancanti per {base_path} (palm_hand/palm_roi)"
+            )
+
+        palm_hand = self.rgb_tf(
+            cv2.cvtColor(cv2.imread(str(hand_path)), cv2.COLOR_BGR2RGB)
+        ).unsqueeze(0)
+        palm_roi = self.rgb_tf(
+            cv2.cvtColor(cv2.imread(str(roi_path)), cv2.COLOR_BGR2RGB)
+        ).unsqueeze(0)
+
+        knuckles = torch.zeros(
+            1, self.n_knuckles, 6, *cfg.PALM_KNUCKLE_SIZE
+        )
+        mask = torch.zeros(1, self.n_knuckles)
+
+        for i, kp in enumerate(knuckle_paths[:self.n_knuckles]):
+            knuckles[0, i] = torch.from_numpy(
+                compute_frit_channels(cv2.imread(str(kp)))
+            )
+            mask[0, i] = 1.0
+
+        return (
+            palm_hand.to(self.device),
+            palm_roi.to(self.device),
+            knuckles.to(self.device),
+            mask.to(self.device),
+        )
+
+    @torch.no_grad()
+    def embed(self, base_path) -> torch.Tensor:
+        palm_hand, palm_roi, knuckles, mask = self._load_sample(base_path)
+        return self.model(
+            palm_hand, palm_roi, knuckles, mask
+        ).squeeze(0).cpu()
+
+    @torch.no_grad()
+    def verify(self, base_path1, base_path2,
+               threshold: float = cfg.VERIFICATION_THRESHOLD):
+        emb1 = self.embed(base_path1)
+        emb2 = self.embed(base_path2)
+        similarity = F.cosine_similarity(
+            emb1.unsqueeze(0), emb2.unsqueeze(0)
+        ).item()
+        return {
+            "same_subject": bool(similarity >= threshold),
+            "similarity": similarity,
+            "threshold": threshold,
+        }
+
+    @torch.no_grad()
+    def identify(self, probe_base_path, gallery: dict[str, torch.Tensor],
+                 threshold: float = cfg.VERIFICATION_THRESHOLD):
+        probe_emb = self.embed(probe_base_path)
+        best_subject, best_sim = None, -1.0
+
+        for subject_id, gallery_emb in gallery.items():
+            sim = F.cosine_similarity(
+                probe_emb.unsqueeze(0), gallery_emb.unsqueeze(0)
+            ).item()
+            if sim > best_sim:
+                best_subject, best_sim = subject_id, sim
+
+        if best_sim < threshold:
+            return {"identified_subject": None, "similarity": best_sim}
+        return {"identified_subject": best_subject, "similarity": best_sim}
+
+
+def cmd_verify(args):
+    run_log_path = default_run_log_path(subdir="logs", prefix="verify")
+    run_logger = RunLogger(run_log_path, run_type="verify", config=vars(args))
+
+    base1, base2 = args.base1, args.base2
+
+    if not (args.raw1 or args.raw2) and not (base1 and base2):
+        raise ValueError(
+            "Specifica --base1/--base2 (file gia' preprocessati) oppure "
+            "--raw1/--raw2 (foto grezze, verranno preprocessate automaticamente)."
+        )
+
+    # Se sono state passate foto grezze (--raw1/--raw2), le portiamo
+    # prima attraverso la stessa pipeline di preprocessing usata per
+    # costruire il dataset (segmentazione mano, ROI, nocche), cosi'
+    # PalmVerifier riceve input nello stesso identico formato su cui
+    # il modello e' stato allenato. Import lazy: preProcessing.py
+    # richiede mediapipe, non necessario per gli altri comandi.
+    tmp_dir_ctx = None
+    if args.raw1 or args.raw2:
+        if not (args.raw1 and args.raw2):
+            raise ValueError(
+                "Se usi --raw1/--raw2 devi passare entrambe le foto grezze "
+                "(oppure usa --base1/--base2 per file gia' preprocessati)."
+            )
+        try:
+            from preProcessing import process_single_image, init_worker
+        except ImportError as exc:
+            raise ImportError(
+                "Impossibile importare preProcessing.py: assicurati che sia "
+                "nella stessa cartella di palm_run.py e che 'mediapipe' sia "
+                "installato (pip install mediapipe)."
+            ) from exc
+
+        init_worker()  # inizializza il detector mediapipe globale nel modulo
+
+        out_dir = args.preprocess_output_dir or tempfile.mkdtemp(prefix="palm_verify_")
+        out_dir = Path(out_dir)
+        print(f"Preprocessing foto grezze in: {out_dir}")
+
+        base1 = _preprocess_raw_photo(
+            process_single_image, args.raw1, "query1", args.hand_side1, out_dir
+        )
+        base2 = _preprocess_raw_photo(
+            process_single_image, args.raw2, "query2", args.hand_side2, out_dir
+        )
+        print(f"  base1 -> {base1}")
+        print(f"  base2 -> {base2}")
+
+    verifier = PalmVerifier(args.checkpoint)
+    result = verifier.verify(
+        base1, base2, threshold=args.threshold
+    )
+    print(json.dumps(result, indent=2))
+    verdict = (
+        "STESSO SOGGETTO"
+        if result["same_subject"] else "SOGGETTI DIVERSI"
+    )
+    print(
+        f"\n>>> {verdict}  (similarity={result['similarity']:.4f}, "
+        f"soglia={result['threshold']:.4f})"
+    )
+    print(f"Log del run: {run_log_path}")
+
+    run_logger.log_event(
+        "verify_result",
+        checkpoint=args.checkpoint,
+        base1=str(base1),
+        base2=str(base2),
+        raw1=args.raw1,
+        raw2=args.raw2,
+        **result,
+    )
+    run_logger.close(status="completed", **result)
+
+
+def _preprocess_raw_photo(process_single_image, img_path, subject_id, hand_side, out_dir):
+    """
+    Esegue process_single_image() su UNA foto grezza e ritorna il
+    'base_path' (cartella/prefix) da passare a PalmVerifier, nello
+    stesso formato usato per costruire dataset_preprocessed.
+    """
+    task = (str(img_path), subject_id, hand_side, 1, str(out_dir))
+    result = process_single_image(task)
+
+    if result["status"] != "success":
+        raise RuntimeError(
+            f"Preprocessing fallito per {img_path}: "
+            f"status={result['status']}, motivo={result.get('reason')}"
+        )
+
+    side_string = str(hand_side).lower()
+    if "dorsal" in side_string or "dorso" in side_string:
+        raise ValueError(
+            f"--hand_side='{hand_side}' indica una mano dorsale, ma 'verify' "
+            f"lavora sul modello palmo: usa 'left'/'right' (palmo) non dorsal."
+        )
+
+    base_name = f"{subject_id}_{hand_side}_{1:03d}"
+    return Path(out_dir) / subject_id / base_name
+
+
+# ============================================================
+# CLI
+# ============================================================
+def main():
+    parser = argparse.ArgumentParser(
+        description="Training + Nested K-Fold + inferenza embedding biometrico palmo"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # Training semplice.
+    p_train = sub.add_parser(
+        "train", help="addestra su train/val per soggetto, escludendo i soggetti HELD-OUT"
+    )
+    p_train.add_argument("--data_dir", default=str(cfg.DATA_DIR))
+    p_train.add_argument("--epochs", type=int, default=cfg.EPOCHS)
+    p_train.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE)
+    p_train.add_argument("--lr", type=float, default=cfg.LR)
+    p_train.add_argument("--freeze_vit", type=parse_bool, default=True)
+    p_train.add_argument("--freeze_mobilenet", type=parse_bool, default=False)
+    p_train.add_argument(
+        "--vit_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_vit_embeddings.py",
+    )
+    p_train.add_argument(
+        "--early_stopping_patience", type=int, default=0,
+        help="epoche senza miglioramento EER dopo cui interrompere (0 = disabilitato)",
+    )
+    p_train.add_argument(
+        "--num_workers", type=int, default=None,
+        help="override di cfg.NUM_WORKERS",
+    )
+    add_split_args(p_train)
+    p_train.set_defaults(func=cmd_train)
+
+    # Nested K-Fold.
+    p_nested = sub.add_parser(
+        "nested_cv",
+        help="Nested K-Fold subject-disjoint: inner tuning + outer final test",
+    )
+    p_nested.add_argument("--data_dir", default=str(cfg.DATA_DIR))
+    p_nested.add_argument("--outer_folds", type=int, default=cfg.OUTER_FOLDS)
+    p_nested.add_argument("--inner_folds", type=int, default=cfg.INNER_FOLDS)
+    p_nested.add_argument("--inner_epochs", type=int, default=cfg.INNER_EPOCHS)
+    p_nested.add_argument(
+        "--outer_epochs", type=int, default=cfg.OUTER_EPOCHS,
+        help="epoche del refit outer dopo la selezione inner",
+    )
+    p_nested.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE)
+    p_nested.add_argument(
+        "--lr_grid", type=parse_float_grid, default=[cfg.LR],
+        help="es. 0.0001,0.0003",
+    )
+    p_nested.add_argument(
+        "--freeze_vit_grid", type=parse_bool_grid, default=[True],
+        help="es. true,false",
+    )
+    p_nested.add_argument(
+        "--freeze_mobilenet_grid", type=parse_bool_grid, default=[False, True],
+        help="es. false,true",
+    )
+    p_nested.add_argument(
+        "--verbose_inner", action="store_true",
+        help="stampa ogni epoca anche durante tutti gli inner fold",
+    )
+    p_nested.add_argument(
+        "--vit_cache_path", type=str, default=None,
+        help="percorso al file .npz prodotto da precompute_vit_embeddings.py; "
+             "se impostato, salta completamente il forward del ViT durante il training",
+    )
+    p_nested.add_argument(
+        "--early_stopping_patience", type=int, default=0,
+        help="numero di epoche senza miglioramento dell'EER dopo cui interrompere "
+             "un fold (0 = disabilitato, gira sempre per il numero di epoche indicato)",
+    )
+    p_nested.add_argument(
+        "--num_workers", type=int, default=None,
+        help="override di cfg.NUM_WORKERS (utile per limitare RAM/CPU su macchine "
+             "poco potenti); default: usa il valore in Config",
+    )
+    add_split_args(p_nested)
+    p_nested.set_defaults(func=cmd_nested_cv)
+
+    # Verifica.
+    p_verify = sub.add_parser(
+        "verify", help="verifica 1:1 tra due acquisizioni preprocessate"
+    )
+    p_verify.add_argument("--checkpoint", required=True)
+    p_verify.add_argument(
+        "--base1", default=None,
+        help="base path di un'acquisizione GIA' preprocessata (es. .../1043_right_001)",
+    )
+    p_verify.add_argument(
+        "--base2", default=None,
+        help="come --base1, per la seconda acquisizione",
+    )
+    p_verify.add_argument(
+        "--raw1", default=None,
+        help="percorso a una FOTO GREZZA (non preprocessata) della prima mano; "
+             "alternativo a --base1, applica automaticamente il preprocessing",
+    )
+    p_verify.add_argument(
+        "--raw2", default=None,
+        help="come --raw1, per la seconda foto grezza",
+    )
+    p_verify.add_argument(
+        "--hand_side1", default="right",
+        help="lateralita' della prima foto grezza: 'left'/'right' (solo con --raw1)",
+    )
+    p_verify.add_argument(
+        "--hand_side2", default="right",
+        help="lateralita' della seconda foto grezza: 'left'/'right' (solo con --raw2)",
+    )
+    p_verify.add_argument(
+        "--preprocess_output_dir", default=None,
+        help="cartella dove salvare l'output del preprocessing di --raw1/--raw2 "
+             "(default: cartella temporanea, cancellata dal sistema operativo "
+             "secondo le sue policy)",
+    )
+    p_verify.add_argument(
+        "--threshold", type=float, default=cfg.VERIFICATION_THRESHOLD
+    )
+    p_verify.set_defaults(func=cmd_verify)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

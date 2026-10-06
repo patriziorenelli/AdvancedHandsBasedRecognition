@@ -1,0 +1,85 @@
+========================================================================
+RISULTATI 11k HANDS - PALMO + DORSO, SPLIT PER SOGGETTI (v5)
+========================================================================
+
+Split: file splits\subject_split_new.json
+Validation: 16 soggetti | Held-out enrolled: 20 | Held-out unknown: 21
+Alpha fusione (verifica): 0.55 | alpha identificazione/open-set: 0.50 | score_norm: zscore (fit su validation)
+
+VALIDATION - VERIFICA 1:1
+------------------------------------------------------------------------
+   PALM: EER=5.5526% | thr=0.331344 | AUC=0.988080
+ DORSAL: EER=6.7692% | thr=0.292722 | AUC=0.979822
+  FUSED: EER=3.1510% | thr=1.205180 | AUC=0.996258
+
+TEST (HELD-OUT) - VERIFICA 1:1
+------------------------------------------------------------------------
+
+PALM
+  EER:                         4.0569%
+  ROC-AUC:                     0.992158
+  TAR @ FAR 1% / 5% / 10%:     90.92% / 96.27% / 97.57%
+  Soglia da validation:        0.331344 (EER validation 5.5526%)
+    FAR=4.8514% FRR=3.8303% Acc=95.1628%
+
+DORSAL
+  EER:                         2.0800%
+  ROC-AUC:                     0.998055
+  TAR @ FAR 1% / 5% / 10%:     96.19% / 99.22% / 99.65%
+  Soglia da validation:        0.292722 (EER validation 6.7692%)
+    FAR=8.4313% FRR=0.4736% Acc=91.6799%
+
+FUSED
+  EER:                         0.8855%
+  ROC-AUC:                     0.999589
+  TAR @ FAR 1% / 5% / 10%:     99.26% / 99.90% / 99.96%
+  Soglia da validation:        1.205180 (EER validation 3.1510%)
+    FAR=3.1703% FRR=0.1647% Acc=96.8718%
+  NOTA SCALA: Punteggi z-normalizzati (statistiche calcolate sulla VALIDATION): la soglia fissa non e' comparabile con quella di palm/dorsal (coseno grezzo).
+
+IDENTIFICAZIONE 1:N closed-set (held-out enrolled)
+------------------------------------------------------------------------
+
+PALM
+  Rank-1:  92.5000%
+  Rank-5:  100.0000%
+  Rank-10: 100.0000%
+  MRR:     0.958333
+
+DORSAL
+  Rank-1:  100.0000%
+  Rank-5:  100.0000%
+  Rank-10: 100.0000%
+  MRR:     1.000000
+
+FUSED
+  Rank-1:  100.0000%
+  Rank-5:  100.0000%
+  Rank-10: 100.0000%
+  MRR:     1.000000
+
+IDENTIFICAZIONE OPEN-SET
+------------------------------------------------------------------------
+Known (held-out enrolled): 20 soggetti, 40 identita' in gallery, 40 probe genuini
+Unknown_cal (VALIDATION): 16 soggetti, 463 probe | Unknown_test (held-out unknown): 21 soggetti, 470 probe
+alpha fusione: 0.50 | score_norm: zscore | probe unknown: scatti 'real'
+Soglia = FPIR-obiettivo calibrato sui soggetti di VALIDATION (mai in gallery), valutato sugli held-out unknown. [oracle] = soglia scelta sugli unknown_test (ottimistica).
+Valori in %. Split fisso: una sola valutazione (nessuna std tra split).
+
+[PALM] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=92.50 | AUC known-vs-unknown=0.9656 | Open-set EER=10.00
+   FPIR-obiettivo 1%: FPIR_test=0.85 | DIR@1=87.50 | FRR_known=12.50 | misid=0.00 | soglia=0.621 | [oracle DIR@1=87.50]
+   FPIR-obiettivo 5%: FPIR_test=3.62 | DIR@1=90.00 | FRR_known=7.50 | misid=2.50 | soglia=0.559 | [oracle DIR@1=90.00]
+   FPIR-obiettivo 10%: FPIR_test=8.30 | DIR@1=90.00 | FRR_known=7.50 | misid=2.50 | soglia=0.524 | [oracle DIR@1=90.00]
+
+[DORSAL] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=100.00 | AUC known-vs-unknown=0.9923 | Open-set EER=5.05
+   FPIR-obiettivo 1%: FPIR_test=0.43 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.688 | [oracle DIR@1=92.50]
+   FPIR-obiettivo 5%: FPIR_test=0.64 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.632 | [oracle DIR@1=95.00]
+   FPIR-obiettivo 10%: FPIR_test=2.13 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.594 | [oracle DIR@1=97.50]
+
+[FUSED] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=100.00 | AUC known-vs-unknown=0.9988 | Open-set EER=2.53
+   FPIR-obiettivo 1%: FPIR_test=1.70 | DIR@1=95.00 | FRR_known=5.00 | misid=0.00 | soglia=2.356 | [oracle DIR@1=95.00]
+   FPIR-obiettivo 5%: FPIR_test=4.47 | DIR@1=100.00 | FRR_known=0.00 | misid=0.00 | soglia=2.079 | [oracle DIR@1=100.00]
+   FPIR-obiettivo 10%: FPIR_test=7.23 | DIR@1=100.00 | FRR_known=0.00 | misid=0.00 | soglia=1.939 | [oracle DIR@1=100.00]
