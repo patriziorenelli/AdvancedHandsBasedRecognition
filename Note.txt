@@ -37,7 +37,12 @@ RIASSUNTO:
 
 TODO: !!!!
 
-1- Sarebbe interessante capire se le identità che sbaglia sul dorso sono giuste sul palmo e viceversa, per capire se i due stream sono complementari
+
+ SI VUOLE CREARE UNA VERSIONE DI MULTIMODAL CHE SFRUTTI I MODELLI TRENATI SU 11K E SFRUTTI PER I TEST SIA IL DATASET 11K CHE NEW_DATASET
+
+CODICE DA RIGUARDARE FORSE
+DA ESEGUIRE: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed_11kHands_copy" --dataset_pre "new_dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
+
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
      - sulle singole componenti del palmar:
@@ -56,12 +61,77 @@ TODO: !!!!
 Comandi esecuzione: 
 
 
-SI VUOLE CREARE UNA VERSIONE DI MULTIMODAL CHE SFRUTTI I MODELLI TRENATI SU 11K E SFRUTTI PER I TEST SIA IL DATASET 11K CHE NEW_DATASET
 
-!!!   !!!!    !!!!!!    !!!!!!!     !!!!!!!   !!!!!   !!!!!!
+------------------------------------------------------------------------------------------------
+TEST FATTO USANDO SPLIT DI 11K HANDS 
 
-DA ESEGUIRE: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed_11kHands_copy" --dataset_pre "new_dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
+FATTO:
 
+      Modificare codice per training in modo da eseguirlo su 11k ma non su tutto il dataset in modo da poter poi fare sempre su 11k tutti i test in modo coerente
+
+      BISOGNA:
+        - Modificare i file dorsal_core / run -> CODICE FATTO ->ESEGUITO: python dorsal_run_new_split_11k.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 60 --lr 0.0001 --freeze_swin true --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+        
+        - Modificare i file palm_core / run   -> CODICE FATTO -> SI STA ESEGUENDO: python palm_run_new_split_11k.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 60 --lr 0.0001 --freeze_vit true --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16
+        
+        Soggetti train/val/held-out salvati in: splits\subject_split_new.json (e dentro il checkpoint)
+        Log completo del run: models_final\logs\train_20261006_081633_05509c.jsonl
+        
+        - pipeine multibiometrica che sfrutta gli stessi split usati nel training dei due stream
+
+        python multimodal_fusional_new_split_11k.py --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --palm_checkpoint models_final/palm_embedding_final_new_split.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final_new_split.pt --out_dir multimodal_new_split_11k --calibrate_alpha --calibrate_alpha_for_rank
+
+        ========================================================================
+VALIDATION - VERIFICA 1:1 (soggetti di validation)
+========================================================================
+    palm: EER=5.55% @thr=0.3313 | AUC=0.9881 | TAR@FAR1%=83.42%
+  dorsal: EER=6.77% @thr=0.2927 | AUC=0.9798 | TAR@FAR1%=86.62%
+   fused: EER=3.15% @thr=1.2052 | AUC=0.9963 | TAR@FAR1%=93.16%
+
+========================================================================
+TEST - VERIFICA 1:1 (soggetti HELD-OUT)
+========================================================================
+Protocollo genuine: same_hand_multi_sample | genuine=4856 | impostor=342496 | alpha=0.55
+    palm: EER=4.06% | AUC=0.9922 | [soglia da validation 0.3313] FAR=4.85% FRR=3.83% Acc=95.16% (EER validation=5.55%)
+  dorsal: EER=2.08% | AUC=0.9981 | [soglia da validation 0.2927] FAR=8.43% FRR=0.47% Acc=91.68% (EER validation=6.77%)
+   fused: EER=0.89% | AUC=0.9996 | [soglia da validation 1.2052] FAR=3.17% FRR=0.16% Acc=96.87% (EER validation=3.15%)
+
+========================================================================
+IDENTIFICAZIONE 1:N closed-set (held-out ENROLLED)
+========================================================================
+
+[IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+Protocollo: same_hand_multi_sample_meanenroll | alpha: 0.50
+    palm: Rank-1=92.50% | Rank-5=100.00% | Rank-10=100.00% | MRR=0.9583 (gallery=40 identita', probe=40)
+  dorsal: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 (gallery=40 identita', probe=40)
+   fused: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 (gallery=40 identita', probe=40)
+
+========================================================================
+IDENTIFICAZIONE OPEN-SET (known=held-out enrolled, unknown_cal=validation, unknown_test=held-out unknown)
+========================================================================
+Known (held-out enrolled): 20 soggetti, 40 identita' in gallery, 40 probe genuini
+Unknown_cal (VALIDATION): 16 soggetti, 463 probe | Unknown_test (held-out unknown): 21 soggetti, 470 probe
+alpha fusione: 0.50 | score_norm: zscore | probe unknown: scatti 'real'
+Soglia = FPIR-obiettivo calibrato sui soggetti di VALIDATION (mai in gallery), valutato sugli held-out unknown. [oracle] = soglia scelta sugli unknown_test (ottimistica).
+Valori in %. Split fisso: una sola valutazione (nessuna std tra split).
+
+[PALM] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=92.50 | AUC known-vs-unknown=0.9656 | Open-set EER=10.00
+   FPIR-obiettivo 1%: FPIR_test=0.85 | DIR@1=87.50 | FRR_known=12.50 | misid=0.00 | soglia=0.621 | [oracle DIR@1=87.50]
+   FPIR-obiettivo 5%: FPIR_test=3.62 | DIR@1=90.00 | FRR_known=7.50 | misid=2.50 | soglia=0.559 | [oracle DIR@1=90.00]
+   FPIR-obiettivo 10%: FPIR_test=8.30 | DIR@1=90.00 | FRR_known=7.50 | misid=2.50 | soglia=0.524 | [oracle DIR@1=90.00]
+
+[DORSAL] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=100.00 | AUC known-vs-unknown=0.9923 | Open-set EER=5.05
+   FPIR-obiettivo 1%: FPIR_test=0.43 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.688 | [oracle DIR@1=92.50]
+   FPIR-obiettivo 5%: FPIR_test=0.64 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.632 | [oracle DIR@1=95.00]
+   FPIR-obiettivo 10%: FPIR_test=2.13 | DIR@1=92.50 | FRR_known=7.50 | misid=0.00 | soglia=0.594 | [oracle DIR@1=97.50]
+
+[FUSED] probe genuini (tutti reali) (n=40)
+   Rank-1 (solo known)=100.00 | AUC known-vs-unknown=0.9988 | Open-set EER=2.53
+   FPIR-obiettivo 1%: FPIR_test=1.70 | DIR@1=95.00 | FRR_known=5.00 | misid=0.00 | soglia=2.356 | [oracle DIR@1=95.00]
+   FPIR-obiettivo 5%: FPIR_test=4.47 | DIR@1=100.00 | FRR_known=0.00 | misid=0.00 | soglia=2.079 | [oracle DIR@1=100.00]
+   FPIR-obiettivo 10%: FPIR_test=7.23 | DIR@1=100.00 | FRR_known=0.00 | misid=0.00 | soglia=1.939 | [oracle DIR@1=100.00]
 
 --------------------------------------------------------------------
 Si sta provando la pipeline multibiometrica usando modelli trainati su new_dataset usando per i test dataset 11k Hands
