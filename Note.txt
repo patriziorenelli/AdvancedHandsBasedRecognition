@@ -37,11 +37,8 @@ RIASSUNTO:
 
 TODO: !!!!
 
+  VALUTARE LE PROPOSTE DI STUDIO DI ABLAZIONE SU PATRIZIORE
 
- SI VUOLE CREARE UNA VERSIONE DI MULTIMODAL CHE SFRUTTI I MODELLI TRENATI SU 11K E SFRUTTI PER I TEST SIA IL DATASET 11K CHE NEW_DATASET
-
-CODICE DA RIGUARDARE FORSE
-DA ESEGUIRE: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed_11kHands_copy" --dataset_pre "new_dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed_NO_AUGEMENTATION" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
 
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
 3- Valutare fattibiltà di uno studio di ablazione per validare la necessità e l'apporto di ogni parte della pipeline al risultato finale:
@@ -60,7 +57,82 @@ DA ESEGUIRE: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\U
 
 Comandi esecuzione: 
 
+ESEGUITO MULTI CORSS DATASET: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --dataset_pre "new-dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
 
+VERIFICA 1:1
+========================================================================
+Protocollo genuine usato: same_hand_multi_sample
+Coppie genuine:  22370
+Coppie impostor: 4051885
+Alpha:            0.50
+    palm: EER=0.43% | AUC=0.9997 | Acc@EER=99.56% | Acc@0.55=99.97%
+  dorsal: EER=0.21% | AUC=1.0000 | Acc@EER=99.79% | Acc@0.55=99.96%
+   fused: EER=0.10% | AUC=1.0000 | Acc@EER=99.90% | Acc@0.55=84.56%  [scala non comparabile, vedi note]
+
+========================================================================
+IDENTIFICAZIONE 1:N
+========================================================================
+
+[IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+Protocollo identificazione usato: same_hand_multi_sample_meanenroll
+Alpha usato per l'identificazione: 0.50
+    palm: Rank-1=98.25% | Rank-5=99.56% | Rank-10=99.56% | MRR=0.9872 | Rank-1(real)=98.25%
+           margine medio top1-top2: 0.5594 (quando sbagliato: 0.0683)
+  dorsal: Rank-1=99.56% | Rank-5=100.00% | Rank-10=100.00% | MRR=0.9978 | Rank-1(real)=99.56%
+           margine medio top1-top2: 0.5133 (quando sbagliato: 0.0520)
+   fused: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(real)=100.00%
+           margine medio top1-top2: 3.4018
+
+========================================================================
+IDENTIFICAZIONE OPEN-SET
+========================================================================
+Split ripetuti: 10 | soggetti totali: 115 | known=58, unknown_cal=28, unknown_test=29 (per split)
+Probe unknown: scatti 'real' | alpha fusione: 0.50 | score_norm: zscore
+Soglia = FPIR-obiettivo calibrato su unknown_cal, valutato su unknown_test (soggetti disgiunti). [oracle] = soglia scelta su unknown_test (ottimistica).
+Valori: media±std sugli split, in %.
+
+[PALM] tutti i probe genuini (nessuna augmentation) (~115 probe genuini/split)
+   Rank-1 (solo known)=98.70±0.89 | AUC known-vs-unknown=0.9985±0.0017 | Open-set EER=1.54±0.95
+   FPIR-obiettivo 1%: FPIR_test=1.17±1.26 | DIR@1=98.53±1.03 | FRR_known=1.13±0.78 | misid=0.35±0.43 | soglia=0.571±0.035 | [oracle DIR@1=98.53±1.03]
+   FPIR-obiettivo 5%: FPIR_test=3.95±2.65 | DIR@1=98.53±1.03 | FRR_known=0.78±0.72 | misid=0.69±0.65 | soglia=0.482±0.024 | [oracle DIR@1=98.53±1.03]
+   FPIR-obiettivo 10%: FPIR_test=8.55±3.92 | DIR@1=98.53±1.03 | FRR_known=0.52±0.69 | misid=0.95±0.72 | soglia=0.429±0.021 | [oracle DIR@1=98.53±1.03]
+
+[PALM] probe genuini SOLO reali (~115 probe genuini/split)
+   Rank-1 (solo known)=98.70±0.89 | AUC known-vs-unknown=0.9985±0.0017 | Open-set EER=1.54±0.95
+   FPIR-obiettivo 1%: FPIR_test=1.17±1.26 | DIR@1=98.53±1.03 | FRR_known=1.13±0.78 | misid=0.35±0.43 | soglia=0.571±0.035 | [oracle DIR@1=98.53±1.03]
+   FPIR-obiettivo 5%: FPIR_test=3.95±2.65 | DIR@1=98.53±1.03 | FRR_known=0.78±0.72 | misid=0.69±0.65 | soglia=0.482±0.024 | [oracle DIR@1=98.53±1.03]
+   FPIR-obiettivo 10%: FPIR_test=8.55±3.92 | DIR@1=98.53±1.03 | FRR_known=0.52±0.69 | misid=0.95±0.72 | soglia=0.429±0.021 | [oracle DIR@1=98.53±1.03]
+
+[DORSAL] tutti i probe genuini (nessuna augmentation) (~115 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9997±0.0003 | Open-set EER=0.67±0.34
+   FPIR-obiettivo 1%: FPIR_test=1.44±1.69 | DIR@1=98.87±1.35 | FRR_known=1.13±1.35 | misid=0.00±0.00 | soglia=0.617±0.044 | [oracle DIR@1=99.48±0.43]
+   FPIR-obiettivo 5%: FPIR_test=5.94±3.85 | DIR@1=99.74±0.40 | FRR_known=0.26±0.40 | misid=0.00±0.00 | soglia=0.529±0.021 | [oracle DIR@1=99.65±0.43]
+   FPIR-obiettivo 10%: FPIR_test=9.88±5.36 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.490±0.022 | [oracle DIR@1=99.91±0.26]
+
+[DORSAL] probe genuini SOLO reali (~115 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9997±0.0003 | Open-set EER=0.67±0.34
+   FPIR-obiettivo 1%: FPIR_test=1.44±1.69 | DIR@1=98.87±1.35 | FRR_known=1.13±1.35 | misid=0.00±0.00 | soglia=0.617±0.044 | [oracle DIR@1=99.48±0.43]
+   FPIR-obiettivo 5%: FPIR_test=5.94±3.85 | DIR@1=99.74±0.40 | FRR_known=0.26±0.40 | misid=0.00±0.00 | soglia=0.529±0.021 | [oracle DIR@1=99.65±0.43]
+   FPIR-obiettivo 10%: FPIR_test=9.88±5.36 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.490±0.022 | [oracle DIR@1=99.91±0.26]
+
+[FUSED] tutti i probe genuini (nessuna augmentation) (~115 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9998±0.0003 | Open-set EER=0.35±0.41
+   FPIR-obiettivo 1%: FPIR_test=1.72±1.92 | DIR@1=99.65±0.42 | FRR_known=0.35±0.42 | misid=0.00±0.00 | soglia=2.677±0.245 | [oracle DIR@1=99.65±0.42]
+   FPIR-obiettivo 5%: FPIR_test=5.64±3.90 | DIR@1=99.91±0.26 | FRR_known=0.09±0.26 | misid=0.00±0.00 | soglia=2.254±0.150 | [oracle DIR@1=99.65±0.42]
+   FPIR-obiettivo 10%: FPIR_test=9.73±5.54 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=2.031±0.147 | [oracle DIR@1=100.00±0.00]
+
+[FUSED] probe genuini SOLO reali (~115 probe genuini/split)
+   Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9998±0.0003 | Open-set EER=0.35±0.41
+   FPIR-obiettivo 1%: FPIR_test=1.72±1.92 | DIR@1=99.65±0.42 | FRR_known=0.35±0.42 | misid=0.00±0.00 | soglia=2.677±0.245 | [oracle DIR@1=99.65±0.42]
+   FPIR-obiettivo 5%: FPIR_test=5.64±3.90 | DIR@1=99.91±0.26 | FRR_known=0.09±0.26 | misid=0.00±0.00 | soglia=2.254±0.150 | [oracle DIR@1=99.65±0.42]
+   FPIR-obiettivo 10%: FPIR_test=9.73±5.54 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=2.031±0.147 | [oracle DIR@1=100.00±0.00]
+[dataset_11k] risultati salvati in: multi_dataset_results\results\dataset_11k
+
+========================================================================
+RIEPILOGO (soggetti TEST, nessuna augmentation, nessun leakage)
+========================================================================
+     dataset_11k: n_sub=115 | EER palm=0.43% dorsal=0.21% fused=0.10% | Rank-1 palm=98.25% dorsal=99.56% fused=100.00% 
+Risultati completi in: multi_dataset_results\results
 
 ------------------------------------------------------------------------------------------------
 TEST FATTO USANDO SPLIT DI 11K HANDS 

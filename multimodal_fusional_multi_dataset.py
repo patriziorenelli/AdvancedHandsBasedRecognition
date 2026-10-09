@@ -501,15 +501,16 @@ def eer_metrics(genuine, impostor):
             [scores[-1] + 1e-7],
         ])
 
-    fars = np.array([np.mean(impostor >= t) for t in thresholds])
-    frrs = np.array([np.mean(genuine < t) for t in thresholds])
+    g_sorted = np.sort(genuine)
+    i_sorted = np.sort(impostor)
+    # FAR = frazione impostor >= t ; FRR = frazione genuine < t
+    fars = (len(i_sorted) - np.searchsorted(i_sorted, thresholds, side="left")) / len(i_sorted)
+    frrs = np.searchsorted(g_sorted, thresholds, side="left") / len(g_sorted)
 
     idx = int(np.argmin(np.abs(fars - frrs)))
-    threshold = float(thresholds[idx])
-    eer = float((fars[idx] + frrs[idx]) / 2.0)
-
     return {
-        "eer": eer, "eer_threshold": threshold,
+        "eer": float((fars[idx] + frrs[idx]) / 2.0),
+        "eer_threshold": float(thresholds[idx]),
         "eer_far": float(fars[idx]), "eer_frr": float(frrs[idx]),
     }
 
@@ -517,30 +518,26 @@ def eer_metrics(genuine, impostor):
 def tar_at_far(genuine, impostor, target_far):
     impostor = np.asarray(impostor, dtype=np.float64)
     genuine = np.asarray(genuine, dtype=np.float64)
-
     if len(impostor) == 0:
         return {"target_far": target_far, "threshold": float("nan"),
                 "actual_far": float("nan"), "tar": float("nan")}
 
-    candidates = np.unique(impostor)
-    candidates = np.concatenate([candidates, [np.max(impostor) + 1e-8]])
+    g_sorted = np.sort(genuine)
+    i_sorted = np.sort(impostor)
+    cand = np.concatenate([np.unique(impostor), [impostor.max() + 1e-8]])
+    far = (len(i_sorted) - np.searchsorted(i_sorted, cand, side="left")) / len(i_sorted)
+    tar = (len(g_sorted) - np.searchsorted(g_sorted, cand, side="left")) / len(g_sorted)
 
-    valid = []
-    for t in candidates:
-        far = float(np.mean(impostor >= t))
-        if far <= target_far:
-            tar = float(np.mean(genuine >= t))
-            valid.append((tar, t, far))
+    ok = far <= target_far
+    if not ok.any():
+        t = cand[-1]
+        return {"target_far": target_far, "threshold": float(t),
+                "actual_far": float(far[-1]), "tar": float(tar[-1])}
+    best = tar[ok].max()
+    k = np.where(ok & (tar == best))[0][-1]   # a parità di TAR, soglia più alta (come prima)
+    return {"target_far": target_far, "threshold": float(cand[k]),
+            "actual_far": float(far[k]), "tar": float(best)}
 
-    if not valid:
-        t = float(np.max(candidates))
-        return {"target_far": target_far, "threshold": t,
-                "actual_far": float(np.mean(impostor >= t)),
-                "tar": float(np.mean(genuine >= t))}
-
-    tar, threshold, actual_far = max(valid, key=lambda x: x[0])
-    return {"target_far": target_far, "threshold": float(threshold),
-            "actual_far": float(actual_far), "tar": float(tar)}
 
 
 def evaluate_verification(genuine, impostor, fixed_threshold, name,
@@ -598,30 +595,25 @@ def _normalize(value, stat):
     return (value - stat["mean"]) / stat["std"]
 
 
-def pair_scores(embeddings, pairs, alpha, norm_stats=None):
-    palm, dorsal, fused = [], [], []
+def pair_scores(embeddings, pairs, alpha, norm_stats=None, chunk=500_000):
+    P = np.stack([np.asarray(e["palm_embedding"], dtype=np.float32).ravel() for e in embeddings])
+    D = np.stack([np.asarray(e["dorsal_embedding"], dtype=np.float32).ravel() for e in embeddings])
+    P /= np.linalg.norm(P, axis=1, keepdims=True) + 1e-12
+    D /= np.linalg.norm(D, axis=1, keepdims=True) + 1e-12
 
-    for i, j in pairs:
-        sp = cosine(embeddings[i]["palm_embedding"], embeddings[j]["palm_embedding"])
-        sd = cosine(embeddings[i]["dorsal_embedding"], embeddings[j]["dorsal_embedding"])
+    pairs = np.asarray(pairs, dtype=np.int64)
+    sp = np.empty(len(pairs)); sd = np.empty(len(pairs))
+    for s in range(0, len(pairs), chunk):
+        a, b = pairs[s:s+chunk, 0], pairs[s:s+chunk, 1]
+        sp[s:s+chunk] = np.einsum("ij,ij->i", P[a], P[b])
+        sd[s:s+chunk] = np.einsum("ij,ij->i", D[a], D[b])
 
-        if norm_stats is not None:
-            sp_fusion = _normalize(sp, norm_stats["palm"])
-            sd_fusion = _normalize(sd, norm_stats["dorsal"])
-        else:
-            sp_fusion, sd_fusion = sp, sd
-
-        sf = alpha * sp_fusion + (1.0 - alpha) * sd_fusion
-
-        palm.append(sp)
-        dorsal.append(sd)
-        fused.append(sf)
-
-    return {
-        "palm": np.asarray(palm, dtype=np.float64),
-        "dorsal": np.asarray(dorsal, dtype=np.float64),
-        "fused": np.asarray(fused, dtype=np.float64),
-    }
+    if norm_stats is not None:
+        sp_f = (sp - norm_stats["palm"]["mean"]) / norm_stats["palm"]["std"]
+        sd_f = (sd - norm_stats["dorsal"]["mean"]) / norm_stats["dorsal"]["std"]
+    else:
+        sp_f, sd_f = sp, sd
+    return {"palm": sp, "dorsal": sd, "fused": alpha * sp_f + (1.0 - alpha) * sd_f}
 
 
 # ============================================================

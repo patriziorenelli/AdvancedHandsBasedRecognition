@@ -24,3 +24,5 @@ models_final/palm_embedding_final_new_dataset.pt
 models_final/dorsal_embedding_final_new_split.pt
 models_final_dorsal/dorsal_embedding_final_new_split.pt
 models_final/palm_embedding_final_new_split.pt
+multi_dataset_results/results/dataset_11k/verification_pairs.csv
+/multi_dataset_results/results/dataset_11k/verification_pairs.csv
