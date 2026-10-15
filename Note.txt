@@ -37,7 +37,143 @@ RIASSUNTO:
 
 TODO: !!!!
 
-  VALUTARE LE PROPOSTE DI STUDIO DI ABLAZIONE SU PATRIZIORE
+DA ESEGUIRE:
+python ablation_branches.py palm   --data_dir dataset_preprocessed --hand_cache "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study frit_channels
+python ablation_branches.py dorsal --data_dir dataset_preprocessed --hand_cache swin_embeds.npz --study components
+
+STUDIO ABLAZIONE VERO :
+
+STO ESEGUENDO:
+python ablation_branches.py palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study components --repeats 1 --epochs 20
+Campioni: 4820 | soggetti: 165 | nocche max: 12
+  rep 0 fold 1: gia' completato, salto
+  rep 0 fold 2 full                         EER=5.71% TAR@1%=85.7%  [6310s]
+  rep 0 fold 2 hand+roi                     EER=6.89% TAR@1%=82.2%  [6457s]
+  rep 0 fold 2 hand+knuckle                 EER=8.10% TAR@1%=77.9%  [12675s]
+  rep 0 fold 2 roi+knuckle                  EER=6.30% TAR@1%=84.0%  [18907s]
+  rep 0 fold 2 hand                         EER=10.61% TAR@1%=71.7%  [19040s]
+  rep 0 fold 2 roi                          EER=7.73% TAR@1%=78.5%  [19178s]
+  rep 0 fold 2 knuckle                      EER=6.29% TAR@1%=76.4%  [25392s]
+  rep 0 fold 2 score_fusion                 EER=4.59%
+  rep 0 fold 3 full                         EER=5.72% TAR@1%=85.9%  [31475s]
+  rep 0 fold 3 hand+roi                     EER=6.30% TAR@1%=83.2%  [31615s]
+  rep 0 fold 3 hand+knuckle                 EER=5.97% TAR@1%=82.1%  [37678s]
+  rep 0 fold 3 roi+knuckle                  EER=8.42% TAR@1%=78.4%  [43762s]
+  rep 0 fold 3 hand                         EER=7.68% TAR@1%=76.4%  [43892s]
+  rep 0 fold 3 roi                          EER=8.82% TAR@1%=74.8%  [44026s]
+  rep 0 fold 3 knuckle                      EER=7.66% TAR@1%=75.8%  [50107s]
+  rep 0 fold 3 score_fusion                 EER=2.80%
+  rep 0 fold 4 full                         EER=5.26% TAR@1%=86.5%  [56146s]
+  rep 0 fold 4 hand+roi                     EER=5.90% TAR@1%=83.8%  [56286s]
+  rep 0 fold 4 hand+knuckle                 EER=6.83% TAR@1%=79.2%  [62316s]
+  rep 0 fold 4 roi+knuckle                  EER=6.31% TAR@1%=83.2%  [68347s]
+  rep 0 fold 4 hand                         EER=8.35% TAR@1%=69.4%  [68476s]
+  rep 0 fold 4 roi                          EER=8.24% TAR@1%=75.6%  [68609s]
+  rep 0 fold 4 knuckle                      EER=10.76% TAR@1%=75.4%  [74630s]
+  rep 0 fold 4 score_fusion                 EER=4.27%
+  rep 0 fold 5 full                         EER=6.14% TAR@1%=82.7%  [80672s]
+  rep 0 fold 5 hand+roi                     EER=6.60% TAR@1%=79.5%  [80812s]
+  rep 0 fold 5 hand+knuckle                 EER=7.12% TAR@1%=78.6%  [86844s]
+  rep 0 fold 5 roi+knuckle                  EER=6.60% TAR@1%=81.8%  [93481s]
+  rep 0 fold 5 hand                         EER=8.72% TAR@1%=68.7%  [93611s]
+  rep 0 fold 5 roi                          EER=9.47% TAR@1%=73.4%  [93744s]
+  rep 0 fold 5 knuckle                      EER=6.56% TAR@1%=81.4%  [99845s]
+  rep 0 fold 5 score_fusion                 EER=3.55%
+
+======================================================================================================================
+ABLAZIONE [palm_components] - 5-fold per soggetto x 1 rip., identita'=hand, test su soggetti mai visti
+======================================================================================================================
+variante                           EER % (media±std)      TAR@1%  d-prime            ΔEER pp [IC95%]  p_corr  p_holm  peggio
+full                                 5.67 ±  0.32        85.29%    3.513              (riferimento)
+hand+roi                             6.67 ±  0.66        81.63%    3.282   +1.00 [ -0.27, +2.26]    0.094   0.377     5/5
+hand+knuckle                         6.84 ±  0.84        79.67%    3.272   +1.17 [ -0.39, +2.72]    0.106   0.377     5/5
+roi+knuckle                          6.72 ±  0.98        82.49%    3.320   +1.04 [ -0.76, +2.84]    0.183   0.377     5/5
+hand                                 8.62 ±  1.20        72.06%    2.955   +2.94 [ +0.75, +5.13]    0.020   0.122     5/5
+roi                                  8.62 ±  0.66        75.61%    2.934   +2.95 [ +1.94, +3.95]    0.001   0.009     5/5
+knuckle                              7.60 ±  1.84        77.41%    3.171   +1.92 [ -1.96, +5.81]    0.242   0.377     5/5
+score_fusion                         3.66 ±  0.76        91.82%    3.890   -2.02 [ -3.69, -0.35]    0.028   0.142     0/5
+ΔEER > 0 = peggio del riferimento. p_corr: t appaiato corretto (Nadeau-Bengio); p_holm: Holm sui confronti del riferimento.
+score_fusion = media dei coseni dei modelli a branch singolo (late fusion), da confrontare con 'full' (early fusion a livello di feature).
+
+Salvati: rows_palm_components.jsonl, summary_palm_components.json, summary_palm_components.tex in ablation_branches_out
+
+python ablation_branches.py dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --folds 3 --repeats 1 --epochs 3 --out_dir smoke
+Campioni: 4945 | soggetti: 164 | nocche max: 12
+  MobileNetV3 congelato: estrazione di 58614 immagini -> smoke\cache\dorsal_knuckle_mnv3.npz
+   mnv3 [58614/58614]
+  rep 0 fold 1 full                         EER=8.00% TAR@1%=77.7%  [6s]
+  rep 0 fold 1 hand                         EER=12.56% TAR@1%=62.1%  [9s]
+  rep 0 fold 1 knuckle                      EER=9.11% TAR@1%=76.5%  [14s]
+  rep 0 fold 1 score_fusion                 EER=7.71%
+  rep 0 fold 2 full                         EER=9.23% TAR@1%=76.8%  [19s]
+  rep 0 fold 2 hand                         EER=13.36% TAR@1%=62.2%  [22s]
+  rep 0 fold 2 knuckle                      EER=9.01% TAR@1%=80.0%  [26s]
+  rep 0 fold 2 score_fusion                 EER=8.06%
+  rep 0 fold 3 full                         EER=7.89% TAR@1%=77.9%  [32s]
+  rep 0 fold 3 hand                         EER=11.76% TAR@1%=61.9%  [35s]
+  rep 0 fold 3 knuckle                      EER=9.84% TAR@1%=72.0%  [39s]
+  rep 0 fold 3 score_fusion                 EER=7.46%
+
+======================================================================================================================
+ABLAZIONE [dorsal_components] - 3-fold per soggetto x 1 rip., identita'=hand, test su soggetti mai visti
+======================================================================================================================
+variante                           EER % (media±std)      TAR@1%  d-prime            ΔEER pp [IC95%]  p_corr  p_holm  peggio
+full                                 8.37 ±  0.74        77.47%    3.103              (riferimento)
+hand                                12.56 ±  0.80        62.07%    2.464   +4.19 [ +2.83, +5.54]    0.006   0.017     3/3
+knuckle                              9.32 ±  0.45        76.15%    2.993   +0.95 [ -3.34, +5.25]    0.441   0.567     2/3
+score_fusion                         7.74 ±  0.30        81.13%    3.217   -0.63 [ -2.49, +1.23]    0.283   0.567     0/3
+ΔEER > 0 = peggio del riferimento. p_corr: t appaiato corretto (Nadeau-Bengio); p_holm: Holm sui confronti del riferimento.
+-----------------------------------------------------------------------------------
+
+ python ablation_vein.py mlp --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out_dir ablation_out
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+  cache: raw
+  cache: clahe
+  cache: green
+  cache: frangi
+  cache: full
+  rep 0 fold 1 raw          EER=12.48%  (frozen 30.34%)  [41s]
+  rep 0 fold 1 clahe        EER=12.31%  (frozen 31.95%)  [76s]
+  rep 0 fold 1 green        EER=12.71%  (frozen 32.41%)  [111s]
+  rep 0 fold 1 frangi       EER=16.22%  (frozen 31.58%)  [145s]
+  rep 0 fold 1 full         EER=12.82%  (frozen 33.03%)  [180s]
+  rep 0 fold 2 raw          EER=14.30%  (frozen 36.65%)  [215s]
+  rep 0 fold 2 clahe        EER=13.45%  (frozen 35.90%)  [249s]
+  rep 0 fold 2 green        EER=14.88%  (frozen 35.08%)  [284s]
+  rep 0 fold 2 frangi       EER=16.63%  (frozen 31.61%)  [318s]
+  rep 0 fold 2 full         EER=13.23%  (frozen 35.82%)  [353s]
+  rep 0 fold 3 raw          EER=14.11%  (frozen 33.67%)  [385s]
+  rep 0 fold 3 clahe        EER=13.33%  (frozen 33.51%)  [420s]
+  rep 0 fold 3 green        EER=14.17%  (frozen 35.06%)  [453s]
+  rep 0 fold 3 frangi       EER=21.11%  (frozen 34.59%)  [485s]
+  rep 0 fold 3 full         EER=15.04%  (frozen 34.43%)  [518s]
+  rep 0 fold 4 raw          EER=11.87%  (frozen 35.24%)  [551s]
+  rep 0 fold 4 clahe        EER=12.26%  (frozen 32.92%)  [584s]
+  rep 0 fold 4 green        EER=11.30%  (frozen 29.62%)  [617s]
+  rep 0 fold 4 frangi       EER=12.83%  (frozen 30.63%)  [650s]
+  rep 0 fold 4 full         EER=12.40%  (frozen 35.48%)  [682s]
+  rep 0 fold 5 raw          EER=10.55%  (frozen 30.27%)  [716s]
+  rep 0 fold 5 clahe        EER=11.57%  (frozen 30.59%)  [750s]
+  rep 0 fold 5 green        EER=12.64%  (frozen 29.99%)  [784s]
+  rep 0 fold 5 frangi       EER=15.77%  (frozen 30.18%)  [818s]
+  rep 0 fold 5 full         EER=12.58%  (frozen 32.77%)  [852s]
+
+====================================================================================================
+D) MLP+ArcFace su Swin congelato, 5-fold per soggetto (x1 ripetizioni), test su soggetti mai visti
+====================================================================================================
+variant | eer (fold mean +/- std) | eer_pooled | eer_frozen | tar@far1e-2 | dprime | delta_vs_raw_pp | folds_better
+--------+-------------------------+------------+------------+-------------+--------+-----------------+-------------
+raw     | 12.66% +/- 1.41%        | 12.76%     | 33.24%     | 61.72%      | 2.398  | +0.00 +/- 0.00  | 0/5         
+clahe   | 12.58% +/- 0.71%        | 12.63%     | 32.97%     | 59.65%      | 2.361  | -0.08 +/- 0.71  | 3/5         
+green   | 13.14% +/- 1.26%        | 13.14%     | 32.43%     | 55.35%      | 2.313  | +0.48 +/- 0.89  | 1/5         
+frangi  | 16.51% +/- 2.66%        | 16.62%     | 31.72%     | 46.58%      | 1.985  | +3.85 +/- 2.12  | 0/5         
+full    | 13.21% +/- 0.95%        | 13.31%     | 34.31%     | 54.98%      | 2.283  | +0.55 +/- 1.00  | 1/5         
+
+(eer_frozen = coseno sul Swin congelato negli stessi fold di test, riferimento senza training)
+
+Salvato: ablation_out\D_mlp.csv / .json
+
+
 
 
 2- Salvare immagine processata dopo ehance_veins() da usare come evidenza del lavoro svolto per preprocessing vene 
@@ -53,9 +189,336 @@ TODO: !!!!
           - valutare efficacia di Swin + CLAHE + Frangi (Quello già fatto nel nested?) e confrontare il loro EER
 
 
+DA ESEGUIRE:
+
+Studio di ablazione:
+
+python ablation_vein.py selftest --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed"
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+Differenza massima per pixel tra dorsal_core.enhance_veins e la versione parametrica: 0
+OK: identiche.
+
+python ablation_vein.py examples --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed"
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+Salvati 6 pannelli in ablation_out\examples
+
+python ablation_vein.py inputs --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed"
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+Estrazione Swin per 5 configurazioni: ['raw', 'clahe', 'green', 'frangi', 'full']
+  [320/4945] 151s
+  [640/4945] 297s
+  [960/4945] 458s
+  [1280/4945] 605s
+  [1600/4945] 750s
+  [1920/4945] 895s
+  [2240/4945] 1040s
+  [2560/4945] 1184s
+  [2880/4945] 1329s
+  [3200/4945] 1481s
+  [3520/4945] 1640s
+  [3840/4945] 1791s
+  [4160/4945] 1941s
+  [4480/4945] 2105s
+  [4800/4945] 2266s
+raw      EER = 33.57%
+clahe    EER = 33.18%
+green    EER = 32.56%
+frangi   EER = 31.91%
+full     EER = 34.57%
+
+====================================================================================================
+A) Swin-Tiny congelato, coseno su 768-d (nessun training)
+====================================================================================================
+variant | eer    | eer_sub          | ci95             | delta_vs_raw_pp | tar@far1e-2 | dprime | n_genuine
+--------+--------+------------------+------------------+-----------------+-------------+--------+----------
+raw     | 33.57% | 33.54% +/- 0.87% | [32.31%, 34.89%] | 0.0             | 25.96%      | 0.819  | 97945    
+clahe   | 33.18% | 33.17% +/- 0.77% | [31.95%, 34.25%] | -0.392          | 25.68%      | 0.818  | 97945    
+green   | 32.56% | 32.53% +/- 0.72% | [31.39%, 33.68%] | -1.006          | 25.43%      | 0.833  | 97945    
+frangi  | 31.91% | 31.86% +/- 0.65% | [30.86%, 32.85%] | -1.661          | 27.51%      | 0.914  | 97945    
+full    | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 1.001           | 22.34%      | 0.737  | 97945  
 
 
-Comandi esecuzione: 
+DA ESEGUIRE:
+# B) sensibilità ai parametri di enhance_veins
+python ablation_vein.py sweep --data_dir  "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out_dir ablation_out
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+Configurazioni uniche da estrarre: 26
+  cache: ref_raw
+  cache: ref_clahe
+  cache: cfg03
+Estrazione Swin per 23 configurazioni: ['cfg00', 'cfg01', 'cfg02', 'cfg04', 'cfg05', 'cfg06', 'cfg07', 'cfg08', 'cfg09', 'cfg10', 'cfg11', 'cfg12', 'cfg13', 'cfg14', 'cfg15', 'cfg16', 'cfg17', 'cfg18', 'cfg19', 'cfg20', 'cfg21', 'cfg22', 'cfg23']
+  [320/4945] 786s
+  [640/4945] 1538s
+  [960/4945] 2291s
+  [1280/4945] 2876s
+  [1600/4945] 3457s
+  [1920/4945] 4039s
+  [2240/4945] 4620s
+  [2560/4945] 5199s
+  [2880/4945] 5779s
+  [3200/4945] 6369s
+  [3520/4945] 6950s
+  [3840/4945] 7532s
+  [4160/4945] 8116s
+  [4480/4945] 8701s
+  [4800/4945] 9279s
+
+====================================================================================================
+B) Sensibilita' ai parametri di enhance_veins (* = default). Swin congelato + coseno
+====================================================================================================
+sweep     | value        | default | eer    | eer_sub          | ci95             | tar@far1e-2 | dprime
+----------+--------------+---------+--------+------------------+------------------+-------------+-------
+reference | raw          |         | 33.57% | 33.54% +/- 0.87% | [32.31%, 34.89%] | 25.96%      | 0.819 
+reference | clahe (solo) |         | 33.18% | 33.17% +/- 0.77% | [31.95%, 34.25%] | 25.68%      | 0.818 
+weight    | 0.0          |         | 33.18% | 33.17% +/- 0.77% | [31.95%, 34.25%] | 25.68%      | 0.818 
+weight    | 0.25         |         | 33.79% | 33.80% +/- 0.74% | [32.62%, 34.87%] | 24.42%      | 0.780 
+weight    | 0.4          |         | 34.25% | 34.23% +/- 0.67% | [33.12%, 35.16%] | 23.35%      | 0.751 
+weight    | 0.55         | *       | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+weight    | 0.7          |         | 34.62% | 34.62% +/- 0.61% | [33.61%, 35.50%] | 21.39%      | 0.737 
+weight    | 0.85         |         | 34.48% | 34.52% +/- 0.61% | [33.47%, 35.40%] | 20.12%      | 0.748 
+weight    | 1.0          |         | 34.58% | 34.63% +/- 0.56% | [33.66%, 35.47%] | 17.69%      | 0.753 
+clip      | 0.0          |         | 34.52% | 34.53% +/- 0.75% | [33.17%, 35.68%] | 22.47%      | 0.758 
+clip      | 1.0          |         | 34.56% | 34.57% +/- 0.72% | [33.35%, 35.67%] | 22.74%      | 0.755 
+clip      | 2.0          |         | 34.65% | 34.64% +/- 0.66% | [33.59%, 35.60%] | 22.31%      | 0.733 
+clip      | 3.0          | *       | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+clip      | 4.0          |         | 34.64% | 34.64% +/- 0.61% | [33.61%, 35.49%] | 22.38%      | 0.737 
+clip      | 6.0          |         | 34.61% | 34.61% +/- 0.60% | [33.63%, 35.50%] | 22.81%      | 0.743 
+clip      | 8.0          |         | 34.69% | 34.69% +/- 0.56% | [33.80%, 35.60%] | 23.15%      | 0.741 
+sigma     | 1            |         | 34.64% | 34.63% +/- 0.63% | [33.59%, 35.50%] | 22.35%      | 0.735 
+sigma     | 2            |         | 33.13% | 33.16% +/- 0.64% | [31.98%, 34.00%] | 23.88%      | 0.807 
+sigma     | 3            |         | 32.81% | 32.83% +/- 0.66% | [31.65%, 33.71%] | 23.99%      | 0.833 
+sigma     | 4            |         | 33.18% | 33.18% +/- 0.70% | [32.02%, 34.15%] | 23.82%      | 0.824 
+sigma     | 1-2          |         | 34.57% | 34.58% +/- 0.63% | [33.52%, 35.45%] | 22.35%      | 0.737 
+sigma     | 1-2-3        |         | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+sigma     | 1-2-3-4      | *       | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+sigma     | 2-3-4        |         | 33.06% | 33.11% +/- 0.66% | [31.91%, 33.96%] | 23.86%      | 0.808 
+sigma     | 1-2-3-4-5-6  |         | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+norm      | max          | *       | 34.57% | 34.58% +/- 0.63% | [33.51%, 35.45%] | 22.34%      | 0.737 
+norm      | p99          |         | 34.23% | 34.27% +/- 0.60% | [33.24%, 35.13%] | 22.02%      | 0.747 
+norm      | p95          |         | 34.56% | 34.61% +/- 0.46% | [33.89%, 35.36%] | 21.85%      | 0.735 
+norm      | none         |         | 34.49% | 34.48% +/- 0.65% | [33.40%, 35.40%] | 22.52%      | 0.737 
+
+Riepilogo di stabilita' (un parametro alla volta, EER in punti percentuali):
+  weight  default=34.57  min=33.18  max=34.62  range=1.44  std=0.50
+  clip    default=34.57  min=34.52  max=34.69  range=0.17  std=0.06
+  sigma   default=34.57  min=32.81  max=34.64  range=1.82  std=0.77
+  norm    default=34.57  min=34.23  max=34.57  range=0.34  std=0.14
+
+Salvato: ablation_out\B_sweep.csv / .json
+
+
+# C) baseline handcrafted NCC
+python ablation_vein.py ncc --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out_dir ablation_out
+Campioni: 4945 | soggetti: 164 | identita' (genuine): 164 [identity=subject]
+  [32/4945]
+  [64/4945]
+  [96/4945]
+  [128/4945]
+  [160/4945]
+  [192/4945]
+  [224/4945]
+  [256/4945]
+  [288/4945]
+  [320/4945]
+  [352/4945]
+  [384/4945]
+  [416/4945]
+  [448/4945]
+  [480/4945]
+  [512/4945]
+  [544/4945]
+  [576/4945]
+  [608/4945]
+  [640/4945]
+  [672/4945]
+  [704/4945]
+  [736/4945]
+  [768/4945]
+  [800/4945]
+  [832/4945]
+  [864/4945]
+  [896/4945]
+  [928/4945]
+  [960/4945]
+  [992/4945]
+  [1024/4945]
+  [1056/4945]
+  [1088/4945]
+  [1120/4945]
+  [1152/4945]
+  [1184/4945]
+  [1216/4945]
+  [1248/4945]
+  [1280/4945]
+  [1312/4945]
+  [1344/4945]
+  [1376/4945]
+  [1408/4945]
+  [1440/4945]
+  [1472/4945]
+  [1504/4945]
+  [1536/4945]
+  [1568/4945]
+  [1600/4945]
+  [1632/4945]
+  [1664/4945]
+  [1696/4945]
+  [1728/4945]
+  [1760/4945]
+  [1792/4945]
+  [1824/4945]
+  [1856/4945]
+  [1888/4945]
+  [1920/4945]
+  [1952/4945]
+  [1984/4945]
+  [2016/4945]
+  [2048/4945]
+  [2080/4945]
+  [2112/4945]
+  [2144/4945]
+  [2176/4945]
+  [2208/4945]
+  [2240/4945]
+  [2272/4945]
+  [2304/4945]
+  [2336/4945]
+  [2368/4945]
+  [2400/4945]
+  [2432/4945]
+  [2464/4945]
+  [2496/4945]
+  [2528/4945]
+  [2560/4945]
+  [2592/4945]
+  [2624/4945]
+  [2656/4945]
+  [2688/4945]
+  [2720/4945]
+  [2752/4945]
+  [2784/4945]
+  [2816/4945]
+  [2848/4945]
+  [2880/4945]
+  [2912/4945]
+  [2944/4945]
+  [2976/4945]
+  [3008/4945]
+  [3040/4945]
+  [3072/4945]
+  [3104/4945]
+  [3136/4945]
+  [3168/4945]
+  [3200/4945]
+  [3232/4945]
+  [3264/4945]
+  [3296/4945]
+  [3328/4945]
+  [3360/4945]
+  [3392/4945]
+  [3424/4945]
+  [3456/4945]
+  [3488/4945]
+  [3520/4945]
+  [3552/4945]
+  [3584/4945]
+  [3616/4945]
+  [3648/4945]
+  [3680/4945]
+  [3712/4945]
+  [3744/4945]
+  [3776/4945]
+  [3808/4945]
+  [3840/4945]
+  [3872/4945]
+  [3904/4945]
+  [3936/4945]
+  [3968/4945]
+  [4000/4945]
+  [4032/4945]
+  [4064/4945]
+  [4096/4945]
+  [4128/4945]
+  [4160/4945]
+  [4192/4945]
+  [4224/4945]
+  [4256/4945]
+  [4288/4945]
+  [4320/4945]
+  [4352/4945]
+  [4384/4945]
+  [4416/4945]
+  [4448/4945]
+  [4480/4945]
+  [4512/4945]
+  [4544/4945]
+  [4576/4945]
+  [4608/4945]
+  [4640/4945]
+  [4672/4945]
+  [4704/4945]
+  [4736/4945]
+  [4768/4945]
+  [4800/4945]
+  [4832/4945]
+  [4864/4945]
+  [4896/4945]
+  [4928/4945]
+  [4945/4945]
+gray        blur=0.0  EER = 42.44%
+gray        blur=1.5  EER = 39.44%
+gray        blur=3.0  EER = 37.95%
+clahe_gray  blur=0.0  EER = 42.38%
+clahe_gray  blur=1.5  EER = 40.09%
+clahe_gray  blur=3.0  EER = 38.97%
+green       blur=0.0  EER = 42.23%
+green       blur=1.5  EER = 39.92%
+green       blur=3.0  EER = 38.01%
+vessel      blur=0.0  EER = 37.23%
+vessel      blur=1.5  EER = 35.57%
+vessel      blur=3.0  EER = 34.95%
+
+====================================================================================================
+C) NCC globale tra mappe (64x64), nessun modello neurale
+====================================================================================================
+map        | blur_sigma | eer    | eer_sub          | ci95             | tar@far1e-2 | dprime | n_genuine
+-----------+------------+--------+------------------+------------------+-------------+--------+----------
+gray       | 0.0        | 42.44% | 42.47% +/- 0.34% | [41.85%, 43.13%] | 14.91%      | 0.562  | 97945    
+gray       | 1.5        | 39.44% | 39.45% +/- 0.51% | [38.42%, 40.27%] | 18.25%      | 0.690  | 97945    
+gray       | 3.0        | 37.95% | 37.93% +/- 0.69% | [36.81%, 39.17%] | 19.39%      | 0.704  | 97945    
+clahe_gray | 0.0        | 42.38% | 42.40% +/- 0.31% | [41.89%, 42.99%] | 15.27%      | 0.569  | 97945    
+clahe_gray | 1.5        | 40.09% | 40.13% +/- 0.47% | [39.28%, 40.97%] | 17.90%      | 0.666  | 97945    
+clahe_gray | 3.0        | 38.97% | 38.99% +/- 0.52% | [38.06%, 39.91%] | 17.68%      | 0.653  | 97945    
+green      | 0.0        | 42.23% | 42.28% +/- 0.28% | [41.81%, 42.85%] | 15.41%      | 0.574  | 97945    
+green      | 1.5        | 39.92% | 39.97% +/- 0.39% | [39.24%, 40.64%] | 17.74%      | 0.679  | 97945    
+green      | 3.0        | 38.01% | 38.08% +/- 0.46% | [37.14%, 38.78%] | 18.19%      | 0.731  | 97945    
+vessel     | 0.0        | 37.23% | 37.25% +/- 0.58% | [36.12%, 38.39%] | 16.11%      | 0.701  | 97945    
+vessel     | 1.5        | 35.57% | 35.60% +/- 0.71% | [34.35%, 36.78%] | 20.50%      | 0.835  | 97945    
+vessel     | 3.0        | 34.95% | 34.98% +/- 0.76% | [33.75%, 36.12%] | 20.56%      | 0.802  | 97945    
+
+Salvato: ablation_out\C_ncc.csv / .json
+
+
+------------------------------------------------------------------------------------------------
+
+A) Varianti di input con Swin-Tiny congelato (raw, clahe, green, frangi, full)
+
+Cosa verifica: l’EER calcolato col coseno direttamente sulle feature Swin a 768 dimensioni, senza MLP, per ogni variante.
+Perché serve: è l’ablazione Swin → +CLAHE → +CLAHE+Frangi che volevi, senza nessun training. Mostra se CLAHE e Frangi aggiungono davvero informazione utile e quanto ciascuno pesa.
+
+B) Sensibilità ai parametri di enhance_veins (preset sweep: weight, clip CLAHE, sigma Frangi, normalizzazione p99)
+
+Cosa verifica: se i risultati cambiano molto variando un parametro alla volta.
+Perché serve: risponde all’obiezione “i parametri sono scelti ad hoc”. Se l’EER è stabile, il preprocessing è robusto e non tarato a mano sui tuoi dati.
+
+C) Controllo handcrafted senza modelli (NCC tra mappe gray, clahe, vessel)
+
+Cosa verifica: quanto discriminano le sole mappe di immagine, senza reti neurali.
+Perché serve: fa da baseline. Se la mappa vessel da sola funziona, il segnale è nelle vene; se serve Swin, il contributo viene dalla rete. Così separi il contributo del preprocessing da quello del backbone.
+
+
+
+-----------------------------------------------
 
 ESEGUITO MULTI CORSS DATASET: python multimodal_fusional_multi_dataset.py --dataset_pre "11k=D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --dataset_pre "new-dataset=D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --palm_checkpoint "models_final\palm_embedding_final.pt" --dorsal_checkpoint "models_final_dorsal\dorsal_embedding_final.pt" --out_dir "multi_dataset_results" --leak_policy off --alpha 0.50 --score_norm zscore
 

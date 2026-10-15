@@ -26,3 +26,9 @@ models_final_dorsal/dorsal_embedding_final_new_split.pt
 models_final/palm_embedding_final_new_split.pt
 multi_dataset_results/results/dataset_11k/verification_pairs.csv
 /multi_dataset_results/results/dataset_11k/verification_pairs.csv
+ablation_branches_out/cache/palm_frit_int8.npy
+ablation_branches_out/cache/palm_roi_mnv3.npz
+ablation_out/examples
+ablation_out/cache
+smoke/cache/dorsal_knuckle_mnv3.npz__pycache__/
+smoke/cache/
