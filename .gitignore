@@ -32,3 +32,6 @@ ablation_out/examples
 ablation_out/cache
 smoke/cache/dorsal_knuckle_mnv3.npz__pycache__/
 smoke/cache/
+ablation_fast/cache
+ablation_dorsal_fast/cache
+ablation_dorsal_10_epoch/cache

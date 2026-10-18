@@ -38,12 +38,106 @@ RIASSUNTO:
 TODO: !!!!
 
 DA ESEGUIRE:
-python ablation_branches.py palm   --data_dir dataset_preprocessed --hand_cache "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study frit_channels
-python ablation_branches.py dorsal --data_dir dataset_preprocessed --hand_cache swin_embeds.npz --study components
+
 
 STUDIO ABLAZIONE VERO :
+ python ablation_branches.py dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --study components --folds 3 --repeats 1 --epochs 10 --batch 64 --out_dir ablation_dorsal_10_epoch
+Campioni: 4945 | soggetti: 164 | nocche max: 12
+  MobileNetV3 congelato: estrazione di 58614 immagini
 
-STO ESEGUENDO:
+  rep 0 fold 1 full                         EER=7.55% TAR@1%=80.4%  [10s]
+  rep 0 fold 1 hand                         EER=11.20% TAR@1%=65.7%  [15s]
+  rep 0 fold 1 knuckle                      EER=8.44% TAR@1%=79.5%  [22s]
+  rep 0 fold 1 score_fusion                 EER=7.13%
+  rep 0 fold 2 full                         EER=7.84% TAR@1%=79.8%  [31s]
+  rep 0 fold 2 hand                         EER=11.78% TAR@1%=66.3%  [36s]
+  rep 0 fold 2 knuckle                      EER=8.57% TAR@1%=80.6%  [42s]
+  rep 0 fold 2 score_fusion                 EER=7.26%
+  rep 0 fold 3 full                         EER=6.87% TAR@1%=81.1%  [52s]
+  rep 0 fold 3 hand                         EER=9.92% TAR@1%=66.3%  [56s]
+  rep 0 fold 3 knuckle                      EER=8.02% TAR@1%=76.3%  [63s]
+  rep 0 fold 3 score_fusion                 EER=5.99%
+
+======================================================================================================================
+ABLAZIONE [dorsal_components] - 3-fold per soggetto x 1 rip., identita'=hand, test su soggetti mai visti
+======================================================================================================================
+variante                           EER % (media±std)      TAR@1%  d-prime            ΔEER pp [IC95%]  p_corr  p_holm  peggio
+full                                 7.42 ±  0.50        80.41%    3.226              (riferimento)
+hand                                10.97 ±  0.95        66.11%    2.605   +3.55 [ +1.77, +5.33]    0.013   0.040     3/3
+knuckle                              8.34 ±  0.29        78.80%    3.118   +0.93 [ +0.11, +1.74]    0.040   0.079     3/3
+score_fusion                         6.79 ±  0.70        84.56%    3.373   -0.62 [ -1.56, +0.31]    0.103   0.103     0/3
+
+
+python ablation_branches.py dorsal --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --study components --folds 3 --repeats 1 --epochs 8 --batch 64 --out_dir ablation_dorsal_fast
+Campioni: 4945 | soggetti: 164 | nocche max: 12
+  MobileNetV3 congelato: estrazione di 58614 immagini
+ rep 0 fold 1 full                         EER=7.45% TAR@1%=80.4%  [8s]
+  rep 0 fold 1 hand                         EER=11.31% TAR@1%=65.1%  [12s]
+  rep 0 fold 1 knuckle                      EER=8.14% TAR@1%=79.9%  [18s]
+  rep 0 fold 1 score_fusion                 EER=6.89%
+  rep 0 fold 2 full                         EER=8.15% TAR@1%=79.0%  [25s]
+  rep 0 fold 2 hand                         EER=11.60% TAR@1%=66.1%  [29s]
+  rep 0 fold 2 knuckle                      EER=8.43% TAR@1%=80.8%  [34s]
+  rep 0 fold 2 score_fusion                 EER=7.00%
+  rep 0 fold 3 full                         EER=6.83% TAR@1%=81.2%  [41s]
+  rep 0 fold 3 hand                         EER=10.17% TAR@1%=66.2%  [45s]
+  rep 0 fold 3 knuckle                      EER=8.08% TAR@1%=76.3%  [51s]
+  rep 0 fold 3 score_fusion                 EER=6.09%
+
+======================================================================================================================
+ABLAZIONE [dorsal_components] - 3-fold per soggetto x 1 rip., identita'=hand, test su soggetti mai visti
+======================================================================================================================
+variante                           EER % (media±std)      TAR@1%  d-prime            ΔEER pp [IC95%]  p_corr  p_holm  peggio
+full                                 7.48 ±  0.66        80.20%    3.201              (riferimento)
+hand                                11.03 ±  0.76        65.81%    2.598   +3.55 [ +2.47, +4.62]    0.005   0.015     3/3
+knuckle                              8.22 ±  0.19        79.00%    3.142   +0.74 [ -1.15, +2.63]    0.235   0.235     3/3
+score_fusion                         6.66 ±  0.50        84.47%    3.387   -0.82 [ -2.02, +0.38]    0.099   0.197     0/3
+
+---------------------------
+
+python ablation_branches.py palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache  "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study frit_channels --folds 3 --repeats 1 --epochs 10 --out_dir ablation_fast
+Campioni: 4820 | soggetti: 165 | nocche max: 12
+  FRIT: calcolo 4820 campioni x 12 nocche -> ablation_fast\cache\palm_frit_int8.npy
+   rep 0 fold 1 frit_all6                    EER=6.71% TAR@1%=82.2%  [2697s]
+  rep 0 fold 1 frit_ridgelet_only           EER=6.86% TAR@1%=81.0%  [5323s]
+  rep 0 fold 1 frit_classical_only          EER=6.50% TAR@1%=82.0%  [7994s]
+  rep 0 fold 1 frit_gray_only               EER=6.99% TAR@1%=80.8%  [10604s]
+  rep 0 fold 1 frit_no_gray                 EER=7.00% TAR@1%=81.5%  [13283s]
+  rep 0 fold 2 frit_all6                    EER=4.76% TAR@1%=87.6%  [15860s]
+  rep 0 fold 2 frit_ridgelet_only           EER=5.09% TAR@1%=85.7%  [18376s]
+  rep 0 fold 2 frit_classical_only          EER=5.13% TAR@1%=87.3%  [20938s]
+  rep 0 fold 2 frit_gray_only               EER=5.40% TAR@1%=86.2%  [23443s]
+  rep 0 fold 2 frit_no_gray                 EER=4.92% TAR@1%=88.2%  [26014s]
+  rep 0 fold 3 frit_all6                    EER=6.56% TAR@1%=81.3%  [28541s]
+  rep 0 fold 3 frit_ridgelet_only           EER=6.62% TAR@1%=80.0%  [31009s]
+  rep 0 fold 3 frit_classical_only          EER=6.17% TAR@1%=81.3%  [33523s]
+  rep 0 fold 3 frit_gray_only               EER=7.29% TAR@1%=78.5%  [35984s]
+  rep 0 fold 3 frit_no_gray                 EER=6.26% TAR@1%=81.5%  [38509s]
+
+======================================================================================================================
+ABLAZIONE [palm_frit_channels] - 3-fold per soggetto x 1 rip., identita'=hand, test su soggetti mai visti
+======================================================================================================================
+variante                           EER % (media±std)      TAR@1%  d-prime            ΔEER pp [IC95%]  p_corr  p_holm  peggio
+frit_all6                            6.01 ±  1.09        83.70%    3.424              (riferimento)
+frit_ridgelet_only                   6.19 ±  0.96        82.23%    3.381   +0.18 [ -0.37, +0.74]    0.287   0.862     3/3
+frit_classical_only                  5.93 ±  0.71        83.52%    3.454   -0.08 [ -1.65, +1.50]    0.854   1.000     1/3
+frit_gray_only                       6.56 ±  1.02        81.83%    3.336   +0.55 [ -0.38, +1.49]    0.126   0.505     3/3
+frit_no_gray                         6.06 ±  1.06        83.74%    3.433   +0.05 [ -1.18, +1.28]    0.872   1.000     2/3
+ΔEER > 0 = peggio del riferimento. p_corr: t appaiato corretto (Nadeau-Bengio); p_holm: Holm sui confronti del riferimento.
+
+Salvati: rows_palm_frit_channels.jsonl, summary_palm_frit_channels.json, summary_palm_frit_channels.tex in ablation_fast
+-------------------------------------------------------------------
+Comando interrotto perchè ci sarebbero voluti 15 giorni:
+python ablation_branches.py palm   --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study frit_channels
+Campioni: 4820 | soggetti: 165 | nocche max: 12
+  rep 0 fold 1 frit_all6                    EER=5.64% TAR@1%=84.9%  [18898s]
+  rep 0 fold 1 frit_ridgelet_only           EER=6.32% TAR@1%=83.2%  [37291s]
+  rep 0 fold 1 frit_classical_only          EER=6.40% TAR@1%=82.8%  [55979s]
+  rep 0 fold 1 frit_gray_only               EER=5.88% TAR@1%=84.8%  [74303s]
+  rep 0 fold 1 frit_no_gray                 EER=5.51% TAR@1%=85.5%  [93069s]
+-------------------------------------------------------------------
+
+
 python ablation_branches.py palm --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --hand_cache "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --study components --repeats 1 --epochs 20
 Campioni: 4820 | soggetti: 165 | nocche max: 12
   rep 0 fold 1: gia' completato, salto
