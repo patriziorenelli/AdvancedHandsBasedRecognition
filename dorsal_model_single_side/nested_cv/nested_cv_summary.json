@@ -1,0 +1,161 @@
+{
+  "protocol": {
+    "name": "Nested K-Fold subject-disjoint",
+    "outer_folds": 3,
+    "inner_folds": 2,
+    "seed": 42,
+    "selection_metric": "open-set EER",
+    "unit_of_split": "subject_id",
+    "identity": "subject_side (<subject>_L / <subject>_R)",
+    "genuine_pairs": "same subject, same side (L-L, R-R)",
+    "impostor_pairs": "different subjects"
+  },
+  "n_subjects": 189,
+  "outer_folds": [
+    {
+      "outer_fold": 1,
+      "n_outer_train_subjects": 126,
+      "n_outer_test_subjects": 63,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_swin": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.077825,
+        "std_eer": 0.022024999999999996,
+        "fold_eers": [
+          0.09985,
+          0.0558
+        ],
+        "selected_epochs": [
+          14,
+          9
+        ],
+        "mean_best_epoch": 12
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.077825,
+          "std_eer": 0.022024999999999996,
+          "fold_eers": [
+            0.09985,
+            0.0558
+          ],
+          "selected_epochs": [
+            14,
+            9
+          ],
+          "mean_best_epoch": 12
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.0426,
+        "eer_threshold": 0.31462925851703405,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "dorsal_model_single_side\\nested_cv\\dorsal_outer_fold_01.pt"
+    },
+    {
+      "outer_fold": 2,
+      "n_outer_train_subjects": 126,
+      "n_outer_test_subjects": 63,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_swin": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.061924999999999994,
+        "std_eer": 0.0003750000000000038,
+        "fold_eers": [
+          0.0623,
+          0.061549999999999994
+        ],
+        "selected_epochs": [
+          10,
+          12
+        ],
+        "mean_best_epoch": 11
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.061924999999999994,
+          "std_eer": 0.0003750000000000038,
+          "fold_eers": [
+            0.0623,
+            0.061549999999999994
+          ],
+          "selected_epochs": [
+            10,
+            12
+          ],
+          "mean_best_epoch": 11
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.08180000000000001,
+        "eer_threshold": 0.2705410821643286,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "dorsal_model_single_side\\nested_cv\\dorsal_outer_fold_02.pt"
+    },
+    {
+      "outer_fold": 3,
+      "n_outer_train_subjects": 126,
+      "n_outer_test_subjects": 63,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_swin": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.077725,
+        "std_eer": 0.011474999999999999,
+        "fold_eers": [
+          0.0892,
+          0.06625
+        ],
+        "selected_epochs": [
+          12,
+          5
+        ],
+        "mean_best_epoch": 8
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_swin": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.077725,
+          "std_eer": 0.011474999999999999,
+          "fold_eers": [
+            0.0892,
+            0.06625
+          ],
+          "selected_epochs": [
+            12,
+            5
+          ],
+          "mean_best_epoch": 8
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.03635,
+        "eer_threshold": 0.34268537074148275,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "dorsal_model_single_side\\nested_cv\\dorsal_outer_fold_03.pt"
+    }
+  ],
+  "summary": {
+    "mean_outer_eer": 0.05358333333333334,
+    "std_outer_eer": 0.020114685072244006,
+    "min_outer_eer": 0.03635,
+    "max_outer_eer": 0.08180000000000001,
+    "mean_eer_threshold": 0.30928523714094847
+  }
+}

@@ -1,0 +1,1 @@
+epoch,train_loss,train_acc,eval_eer,eval_eer_threshold,lr,epoch_seconds,timestamp
