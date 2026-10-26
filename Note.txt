@@ -49,11 +49,233 @@ DA ESEGUIRE:
 STO ESEGUENDO IL CODICE CON LA MODIFICA DEI SIDE SX-SX E DX-DX
 
 
-TRAIN DORSO: ?? VEDI COMANDO DA LANCIARE COME PRECEDENTE
 FAI CODICE PER PALM SINGLE SIDE 
 NESTED PALM:
 TRAIN PALM:
 
+TRAIN DORSO: NUOVO MODELLO dorsal_model_single_side\dorsal_embedding_final.pt !!!
+python dorsal_run_single_side.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
+Device: cpu
+Run log: dorsal_model_single_side\logs\train_20261026_092225_065374.jsonl
+NUM_WORKERS impostato a 1 da CLI
+
+Carico cache embedding Swin da: D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz
+  -> 4945 embedding caricate
+Soggetti train: 161 | Soggetti validation (open-set): 28
+  [epoch 1] step 0/273 loss=16.9748 acc=0.0000
+  [epoch 1] step 20/273 loss=14.7763 acc=0.0000
+  [epoch 1] step 40/273 loss=15.0308 acc=0.0000
+  [epoch 1] step 60/273 loss=13.7925 acc=0.0000
+  [epoch 1] step 80/273 loss=14.8280 acc=0.0000
+  [epoch 1] step 100/273 loss=13.2357 acc=0.0000
+  [epoch 1] step 120/273 loss=12.8912 acc=0.0000
+  [epoch 1] step 140/273 loss=13.4232 acc=0.0000
+  [epoch 1] step 160/273 loss=12.0474 acc=0.0000
+  [epoch 1] step 180/273 loss=12.7364 acc=0.0003
+  [epoch 1] step 200/273 loss=10.6838 acc=0.0003
+  [epoch 1] step 220/273 loss=10.9087 acc=0.0003
+  [epoch 1] step 240/273 loss=11.4640 acc=0.0005
+  [epoch 1] step 260/273 loss=11.9812 acc=0.0012
+Epoch 1/20 - loss=13.0758 acc=0.0023 (3378.9s) lr=9.94e-05 | eval EER=9.04% @thr=0.495
+  [epoch 2] step 0/273 loss=8.5042 acc=0.0625
+  [epoch 2] step 20/273 loss=9.3439 acc=0.0357
+  [epoch 2] step 40/273 loss=10.2887 acc=0.0351
+  [epoch 2] step 60/273 loss=8.5116 acc=0.0379
+  [epoch 2] step 80/273 loss=8.6749 acc=0.0347
+  [epoch 2] step 100/273 loss=8.4629 acc=0.0377
+  [epoch 2] step 120/273 loss=8.9339 acc=0.0444
+  [epoch 2] step 140/273 loss=9.2622 acc=0.0461
+  [epoch 2] step 160/273 loss=9.0694 acc=0.0462
+  [epoch 2] step 180/273 loss=6.8747 acc=0.0497
+  [epoch 2] step 200/273 loss=6.9655 acc=0.0550
+  [epoch 2] step 220/273 loss=8.4258 acc=0.0608
+  [epoch 2] step 240/273 loss=6.6768 acc=0.0648
+  [epoch 2] step 260/273 loss=6.3411 acc=0.0704
+Epoch 2/20 - loss=8.0472 acc=0.0728 (3367.9s) lr=9.76e-05 | eval EER=4.11% @thr=0.383
+  [epoch 3] step 0/273 loss=4.4850 acc=0.1875
+  [epoch 3] step 20/273 loss=4.8980 acc=0.1667
+  [epoch 3] step 40/273 loss=4.9056 acc=0.1738
+  [epoch 3] step 60/273 loss=5.0380 acc=0.1762
+  [epoch 3] step 80/273 loss=4.6513 acc=0.1860
+  [epoch 3] step 100/273 loss=4.0337 acc=0.1925
+  [epoch 3] step 120/273 loss=5.5084 acc=0.1989
+  [epoch 3] step 140/273 loss=3.6532 acc=0.2061
+  [epoch 3] step 160/273 loss=5.0831 acc=0.2104
+  [epoch 3] step 180/273 loss=5.0125 acc=0.2162
+  [epoch 3] step 200/273 loss=3.4293 acc=0.2254
+  [epoch 3] step 220/273 loss=4.9626 acc=0.2305
+  [epoch 3] step 240/273 loss=4.5836 acc=0.2376
+  [epoch 3] step 260/273 loss=3.6791 acc=0.2440
+Epoch 3/20 - loss=4.8846 acc=0.2461 (3374.6s) lr=9.46e-05 | eval EER=3.02% @thr=0.399
+  [epoch 4] step 0/273 loss=3.6929 acc=0.4375
+  [epoch 4] step 20/273 loss=2.4352 acc=0.4018
+  [epoch 4] step 40/273 loss=2.0264 acc=0.4070
+  [epoch 4] step 60/273 loss=2.4826 acc=0.4016
+  [epoch 4] step 80/273 loss=3.2998 acc=0.4105
+  [epoch 4] step 100/273 loss=1.8204 acc=0.4059
+  [epoch 4] step 120/273 loss=2.2669 acc=0.4075
+  [epoch 4] step 140/273 loss=2.3182 acc=0.4078
+  [epoch 4] step 160/273 loss=3.5812 acc=0.4119
+  [epoch 4] step 180/273 loss=1.9803 acc=0.4157
+  [epoch 4] step 200/273 loss=3.1483 acc=0.4204
+  [epoch 4] step 220/273 loss=2.6887 acc=0.4256
+  [epoch 4] step 240/273 loss=2.6179 acc=0.4323
+  [epoch 4] step 260/273 loss=2.1499 acc=0.4370
+Epoch 4/20 - loss=2.9920 acc=0.4386 (3385.9s) lr=9.05e-05 | eval EER=3.74% @thr=0.407
+  [epoch 5] step 0/273 loss=2.6059 acc=0.5000
+  [epoch 5] step 20/273 loss=2.1541 acc=0.5804
+  [epoch 5] step 40/273 loss=1.0746 acc=0.5732
+  [epoch 5] step 60/273 loss=1.7755 acc=0.5553
+  [epoch 5] step 80/273 loss=1.2045 acc=0.5671
+  [epoch 5] step 100/273 loss=0.9092 acc=0.5848
+  [epoch 5] step 120/273 loss=2.1258 acc=0.5863
+  [epoch 5] step 140/273 loss=1.9387 acc=0.5873
+  [epoch 5] step 160/273 loss=1.9326 acc=0.5870
+  [epoch 5] step 180/273 loss=2.5357 acc=0.5867
+  [epoch 5] step 200/273 loss=1.7077 acc=0.5911
+  [epoch 5] step 220/273 loss=1.1166 acc=0.5970
+  [epoch 5] step 240/273 loss=1.9209 acc=0.6014
+  [epoch 5] step 260/273 loss=2.3056 acc=0.6001
+Epoch 5/20 - loss=1.8068 acc=0.6042 (3365.0s) lr=8.54e-05 | eval EER=2.45% @thr=0.407
+  [epoch 6] step 0/273 loss=0.7696 acc=0.7500
+  [epoch 6] step 20/273 loss=1.1925 acc=0.6935
+  [epoch 6] step 40/273 loss=1.1456 acc=0.7043
+  [epoch 6] step 60/273 loss=1.0175 acc=0.7029
+  [epoch 6] step 80/273 loss=1.6766 acc=0.7037
+  [epoch 6] step 100/273 loss=2.2192 acc=0.7085
+  [epoch 6] step 120/273 loss=1.2458 acc=0.7154
+  [epoch 6] step 140/273 loss=0.2227 acc=0.7185
+  [epoch 6] step 160/273 loss=1.0309 acc=0.7201
+  [epoch 6] step 180/273 loss=0.9033 acc=0.7213
+  [epoch 6] step 200/273 loss=1.4885 acc=0.7214
+  [epoch 6] step 220/273 loss=0.8175 acc=0.7271
+  [epoch 6] step 240/273 loss=1.1555 acc=0.7308
+  [epoch 6] step 260/273 loss=1.2933 acc=0.7332
+Epoch 6/20 - loss=1.1332 acc=0.7335 (3385.0s) lr=7.94e-05 | eval EER=2.31% @thr=0.411
+  [epoch 7] step 0/273 loss=0.5628 acc=0.8750
+  [epoch 7] step 20/273 loss=0.6064 acc=0.8452
+  [epoch 7] step 40/273 loss=0.3169 acc=0.8384
+  [epoch 7] step 60/273 loss=0.3244 acc=0.8238
+  [epoch 7] step 80/273 loss=0.5728 acc=0.8171
+  [epoch 7] step 100/273 loss=0.1548 acc=0.8199
+  [epoch 7] step 120/273 loss=0.5971 acc=0.8233
+  [epoch 7] step 140/273 loss=0.8436 acc=0.8218
+  [epoch 7] step 160/273 loss=0.5339 acc=0.8218
+  [epoch 7] step 180/273 loss=0.5716 acc=0.8177
+  [epoch 7] step 200/273 loss=1.2198 acc=0.8178
+  [epoch 7] step 220/273 loss=0.7794 acc=0.8193
+  [epoch 7] step 240/273 loss=0.2826 acc=0.8192
+  [epoch 7] step 260/273 loss=0.6337 acc=0.8206
+Epoch 7/20 - loss=0.7371 acc=0.8212 (3370.8s) lr=7.27e-05 | eval EER=2.35% @thr=0.375
+  [epoch 8] step 0/273 loss=0.3317 acc=0.9375
+  [epoch 8] step 20/273 loss=0.5314 acc=0.8690
+  [epoch 8] step 40/273 loss=0.7676 acc=0.8506
+  [epoch 8] step 60/273 loss=0.2169 acc=0.8689
+  [epoch 8] step 80/273 loss=0.5888 acc=0.8673
+  [epoch 8] step 100/273 loss=1.4766 acc=0.8707
+  [epoch 8] step 120/273 loss=0.2433 acc=0.8750
+  [epoch 8] step 140/273 loss=0.3691 acc=0.8772
+  [epoch 8] step 160/273 loss=0.4306 acc=0.8777
+  [epoch 8] step 180/273 loss=0.7078 acc=0.8798
+  [epoch 8] step 200/273 loss=0.9228 acc=0.8800
+  [epoch 8] step 220/273 loss=0.5652 acc=0.8764
+  [epoch 8] step 240/273 loss=0.2990 acc=0.8771
+  [epoch 8] step 260/273 loss=0.6237 acc=0.8795
+Epoch 8/20 - loss=0.4784 acc=0.8800 (3375.8s) lr=6.55e-05 | eval EER=2.47% @thr=0.387
+  [epoch 9] step 0/273 loss=0.1286 acc=1.0000
+  [epoch 9] step 20/273 loss=0.3319 acc=0.8988
+  [epoch 9] step 40/273 loss=0.5248 acc=0.9085
+  [epoch 9] step 60/273 loss=0.2971 acc=0.9098
+  [epoch 9] step 80/273 loss=0.2691 acc=0.9097
+  [epoch 9] step 100/273 loss=0.4500 acc=0.9134
+  [epoch 9] step 120/273 loss=0.2595 acc=0.9096
+  [epoch 9] step 140/273 loss=0.1674 acc=0.9105
+  [epoch 9] step 160/273 loss=0.1755 acc=0.9123
+  [epoch 9] step 180/273 loss=0.1171 acc=0.9126
+  [epoch 9] step 200/273 loss=0.1942 acc=0.9154
+  [epoch 9] step 220/273 loss=0.2593 acc=0.9137
+  [epoch 9] step 240/273 loss=0.6826 acc=0.9139
+  [epoch 9] step 260/273 loss=0.0897 acc=0.9150
+Epoch 9/20 - loss=0.3214 acc=0.9158 (3375.8s) lr=5.78e-05 | eval EER=2.00% @thr=0.403
+  [epoch 10] step 0/273 loss=0.1048 acc=1.0000
+  [epoch 10] step 20/273 loss=0.4214 acc=0.9554
+  [epoch 10] step 40/273 loss=0.2017 acc=0.9543
+  [epoch 10] step 60/273 loss=0.2500 acc=0.9549
+  [epoch 10] step 80/273 loss=0.0828 acc=0.9583
+  [epoch 10] step 100/273 loss=0.3252 acc=0.9573
+  [epoch 10] step 120/273 loss=0.2935 acc=0.9571
+  [epoch 10] step 140/273 loss=0.1239 acc=0.9543
+  [epoch 10] step 160/273 loss=0.7376 acc=0.9542
+  [epoch 10] step 180/273 loss=0.1424 acc=0.9544
+  [epoch 10] step 200/273 loss=0.1028 acc=0.9562
+  [epoch 10] step 220/273 loss=0.4218 acc=0.9556
+  [epoch 10] step 240/273 loss=0.0625 acc=0.9554
+  [epoch 10] step 260/273 loss=0.1336 acc=0.9555
+Epoch 10/20 - loss=0.2092 acc=0.9538 (3374.6s) lr=5.00e-05 | eval EER=2.56% @thr=0.423
+  [epoch 11] step 0/273 loss=0.1648 acc=0.9375
+  [epoch 11] step 20/273 loss=0.2013 acc=0.9702
+  [epoch 11] step 40/273 loss=0.0937 acc=0.9710
+  [epoch 11] step 60/273 loss=0.0377 acc=0.9703
+  [epoch 11] step 80/273 loss=0.1158 acc=0.9691
+  [epoch 11] step 100/273 loss=0.0456 acc=0.9691
+  [epoch 11] step 120/273 loss=0.0793 acc=0.9680
+  [epoch 11] step 140/273 loss=0.1948 acc=0.9685
+  [epoch 11] step 160/273 loss=0.1552 acc=0.9674
+  [epoch 11] step 180/273 loss=0.0593 acc=0.9651
+  [epoch 11] step 200/273 loss=0.0326 acc=0.9646
+  [epoch 11] step 220/273 loss=0.2345 acc=0.9624
+  [epoch 11] step 240/273 loss=0.1890 acc=0.9627
+  [epoch 11] step 260/273 loss=0.4758 acc=0.9622
+Epoch 11/20 - loss=0.1569 acc=0.9627 (3378.4s) lr=4.22e-05 | eval EER=2.76% @thr=0.359
+  [epoch 12] step 0/273 loss=0.0527 acc=1.0000
+  [epoch 12] step 20/273 loss=0.1495 acc=0.9762
+  [epoch 12] step 40/273 loss=0.0367 acc=0.9802
+  [epoch 12] step 60/273 loss=0.1884 acc=0.9795
+  [epoch 12] step 80/273 loss=0.2174 acc=0.9799
+  [epoch 12] step 100/273 loss=0.0374 acc=0.9808
+  [epoch 12] step 120/273 loss=0.0208 acc=0.9824
+  [epoch 12] step 140/273 loss=0.0756 acc=0.9827
+  [epoch 12] step 160/273 loss=0.1033 acc=0.9810
+  [epoch 12] step 180/273 loss=0.2467 acc=0.9786
+  [epoch 12] step 200/273 loss=0.0310 acc=0.9782
+  [epoch 12] step 220/273 loss=0.3120 acc=0.9782
+  [epoch 12] step 240/273 loss=0.1935 acc=0.9769
+  [epoch 12] step 260/273 loss=0.0593 acc=0.9761
+Epoch 12/20 - loss=0.1084 acc=0.9762 (3378.5s) lr=3.45e-05 | eval EER=2.56% @thr=0.375
+  [epoch 13] step 0/273 loss=0.0361 acc=1.0000
+  [epoch 13] step 20/273 loss=0.0377 acc=0.9881
+  [epoch 13] step 40/273 loss=0.0616 acc=0.9909
+  [epoch 13] step 60/273 loss=0.0457 acc=0.9918
+  [epoch 13] step 80/273 loss=0.0342 acc=0.9892
+  [epoch 13] step 100/273 loss=0.1229 acc=0.9895
+  [epoch 13] step 120/273 loss=0.0642 acc=0.9886
+  [epoch 13] step 140/273 loss=0.0557 acc=0.9876
+  [epoch 13] step 160/273 loss=0.1118 acc=0.9864
+  [epoch 13] step 180/273 loss=0.0183 acc=0.9858
+  [epoch 13] step 200/273 loss=0.0226 acc=0.9857
+  [epoch 13] step 220/273 loss=0.0700 acc=0.9856
+  [epoch 13] step 240/273 loss=0.1697 acc=0.9852
+  [epoch 13] step 260/273 loss=0.1323 acc=0.9854
+Epoch 13/20 - loss=0.0828 acc=0.9856 (3377.7s) lr=2.73e-05 | eval EER=2.54% @thr=0.367
+  [epoch 14] step 0/273 loss=0.0269 acc=1.0000
+  [epoch 14] step 20/273 loss=0.0968 acc=0.9821
+  [epoch 14] step 40/273 loss=0.0481 acc=0.9909
+  [epoch 14] step 60/273 loss=0.0774 acc=0.9918
+  [epoch 14] step 80/273 loss=0.0091 acc=0.9923
+  [epoch 14] step 100/273 loss=0.0178 acc=0.9932
+  [epoch 14] step 120/273 loss=0.0580 acc=0.9938
+  [epoch 14] step 140/273 loss=0.0454 acc=0.9929
+  [epoch 14] step 160/273 loss=0.0144 acc=0.9918
+  [epoch 14] step 180/273 loss=0.0227 acc=0.9917
+  [epoch 14] step 200/273 loss=0.0228 acc=0.9922
+  [epoch 14] step 220/273 loss=0.0938 acc=0.9918
+  [epoch 14] step 240/273 loss=0.0425 acc=0.9920
+  [epoch 14] step 260/273 loss=0.0765 acc=0.9926
+Epoch 14/20 - loss=0.0599 acc=0.9924 (3375.9s) lr=2.06e-05 | eval EER=2.21% @thr=0.379
+  [early stopping] nessun miglioramento EER da 5 epoche (best epoch=9, best EER=2.00%). Interrompo a epoca 14/20.
+
+Training completato. Modello finale: dorsal_model_single_side\dorsal_embedding_final.pt
+EER validation open-set: 2.00% @thr=0.403
 
 DA VEDERE I RISULTATI DEL JSON SOTTO DEL NESTED 
 NESTED DORSO: python dorsal_run_single_side.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 3 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 3 --num_workers 1 --batch_size 16

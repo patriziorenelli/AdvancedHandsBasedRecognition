@@ -38,3 +38,4 @@ ablation_dorsal_10_epoch/cache
 dorsal_model_single_side/nested_cv/dorsal_outer_fold_01.pt
 dorsal_model_single_side/nested_cv/dorsal_outer_fold_02.pt
 dorsal_model_single_side/nested_cv/dorsal_outer_fold_03.pt
+dorsal_model_single_side/dorsal_embedding_final.pt
