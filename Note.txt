@@ -46,13 +46,11 @@ DA ESEGUIRE:
 
  Nella multimodal_fusional_new_dataset invece i genuini sono costruiti nel modo corretto 
 
-STO ESEGUENDO IL CODICE CON LA MODIFICA DEI SIDE SX-SX E DX-DX
 
 RIFARE I TEST DELLA PIPELINE MULTIMODALE CON I MODELLI SINGLE SIDE E VEDERE I NUOVI RISULTATI
 
-SI STA ESEGUENDO IL TRAIN 
 
-TRAIN PALM: python palm_run_single_side.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
+
 
 NESTED PALM: python palm_run_single_side.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 OUTER 4] FINAL TEST (mai usato nell'inner CV): EER=8.67% @thr=0.263
@@ -66,6 +64,10 @@ Threshold EER medio (solo descrittivo): 0.300
 Summary JSON: palm_model_single_side\nested_cv\nested_cv_summary.json
 Log completo del run: palm_model_single_side\nested_cv\logs\nested_cv_20261027_124721_3a8427.jsonl
 
+TRAIN PALM: python palm_run_single_side.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 5 --num_workers 2 --batch_size 48
+Training completato. Modello finale: palm_model_single_side\palm_embedding_final.pt
+Log completo del run: palm_model_single_side\logs\train_20261029_152712_557c2e.jsonl
+EER validation open-set: 3.99% @thr=0.367
 
 TRAIN DORSO: NUOVO MODELLO dorsal_model_single_side\dorsal_embedding_final.pt !!!
 python dorsal_run_single_side.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
