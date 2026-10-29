@@ -1,0 +1,268 @@
+{
+  "protocol": {
+    "name": "Nested K-Fold subject-disjoint",
+    "outer_folds": 4,
+    "inner_folds": 2,
+    "seed": 42,
+    "selection_metric": "open-set EER",
+    "unit_of_split": "subject_id"
+  },
+  "n_subjects": 189,
+  "outer_folds": [
+    {
+      "outer_fold": 1,
+      "n_outer_train_subjects": 141,
+      "n_outer_test_subjects": 48,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_vit": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.0819,
+        "std_eer": 0.018250000000000002,
+        "fold_eers": [
+          0.06365,
+          0.10015
+        ],
+        "selected_epochs": [
+          10,
+          10
+        ],
+        "mean_best_epoch": 10
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.0819,
+          "std_eer": 0.018250000000000002,
+          "fold_eers": [
+            0.06365,
+            0.10015
+          ],
+          "selected_epochs": [
+            10,
+            10
+          ],
+          "mean_best_epoch": 10
+        },
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.08864999999999999,
+          "std_eer": 0.014950000000000005,
+          "fold_eers": [
+            0.1036,
+            0.07369999999999999
+          ],
+          "selected_epochs": [
+            10,
+            12
+          ],
+          "mean_best_epoch": 11
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.06109324758842444,
+        "eer_threshold": 0.2985971943887775,
+        "n_genuine": 7775,
+        "n_impostor": 7775
+      },
+      "checkpoint": "palm_model_single_side\\nested_cv\\palm_outer_fold_01.pt"
+    },
+    {
+      "outer_fold": 2,
+      "n_outer_train_subjects": 142,
+      "n_outer_test_subjects": 47,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_vit": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.08222499999999999,
+        "std_eer": 0.009575,
+        "fold_eers": [
+          0.09179999999999999,
+          0.07264999999999999
+        ],
+        "selected_epochs": [
+          15,
+          14
+        ],
+        "mean_best_epoch": 14
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.08222499999999999,
+          "std_eer": 0.009575,
+          "fold_eers": [
+            0.09179999999999999,
+            0.07264999999999999
+          ],
+          "selected_epochs": [
+            15,
+            14
+          ],
+          "mean_best_epoch": 14
+        },
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.0893,
+          "std_eer": 0.011499999999999996,
+          "fold_eers": [
+            0.1008,
+            0.07780000000000001
+          ],
+          "selected_epochs": [
+            11,
+            15
+          ],
+          "mean_best_epoch": 13
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.058076498343539805,
+        "eer_threshold": 0.3186372745490982,
+        "n_genuine": 9961,
+        "n_impostor": 9961
+      },
+      "checkpoint": "palm_model_single_side\\nested_cv\\palm_outer_fold_02.pt"
+    },
+    {
+      "outer_fold": 3,
+      "n_outer_train_subjects": 142,
+      "n_outer_test_subjects": 47,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_vit": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.093875,
+        "std_eer": 0.015024999999999997,
+        "fold_eers": [
+          0.07885,
+          0.1089
+        ],
+        "selected_epochs": [
+          10,
+          15
+        ],
+        "mean_best_epoch": 12
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.093875,
+          "std_eer": 0.015024999999999997,
+          "fold_eers": [
+            0.07885,
+            0.1089
+          ],
+          "selected_epochs": [
+            10,
+            15
+          ],
+          "mean_best_epoch": 12
+        },
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.09815,
+          "std_eer": 0.002699999999999994,
+          "fold_eers": [
+            0.10085,
+            0.09545000000000001
+          ],
+          "selected_epochs": [
+            11,
+            8
+          ],
+          "mean_best_epoch": 10
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.04685,
+        "eer_threshold": 0.3186372745490982,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "palm_model_single_side\\nested_cv\\palm_outer_fold_03.pt"
+    },
+    {
+      "outer_fold": 4,
+      "n_outer_train_subjects": 142,
+      "n_outer_test_subjects": 47,
+      "selected_hyperparameters": {
+        "lr": 0.0001,
+        "freeze_vit": true,
+        "freeze_mobilenet": false,
+        "mean_eer": 0.075475,
+        "std_eer": 0.005875000000000005,
+        "fold_eers": [
+          0.0696,
+          0.08135
+        ],
+        "selected_epochs": [
+          11,
+          15
+        ],
+        "mean_best_epoch": 13
+      },
+      "all_inner_candidates": [
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": false,
+          "mean_eer": 0.075475,
+          "std_eer": 0.005875000000000005,
+          "fold_eers": [
+            0.0696,
+            0.08135
+          ],
+          "selected_epochs": [
+            11,
+            15
+          ],
+          "mean_best_epoch": 13
+        },
+        {
+          "lr": 0.0001,
+          "freeze_vit": true,
+          "freeze_mobilenet": true,
+          "mean_eer": 0.086925,
+          "std_eer": 0.0032250000000000056,
+          "fold_eers": [
+            0.0837,
+            0.09015000000000001
+          ],
+          "selected_epochs": [
+            13,
+            10
+          ],
+          "mean_best_epoch": 12
+        }
+      ],
+      "outer_test_metrics": {
+        "eer": 0.08675,
+        "eer_threshold": 0.26252505010020033,
+        "n_genuine": 10000,
+        "n_impostor": 10000
+      },
+      "checkpoint": "palm_model_single_side\\nested_cv\\palm_outer_fold_04.pt"
+    }
+  ],
+  "summary": {
+    "mean_outer_eer": 0.06319243648299105,
+    "std_outer_eer": 0.014599772653369224,
+    "min_outer_eer": 0.04685,
+    "max_outer_eer": 0.08675,
+    "mean_eer_threshold": 0.29959919839679355
+  }
+}

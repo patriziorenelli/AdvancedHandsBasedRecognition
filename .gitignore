@@ -39,3 +39,7 @@ dorsal_model_single_side/nested_cv/dorsal_outer_fold_01.pt
 dorsal_model_single_side/nested_cv/dorsal_outer_fold_02.pt
 dorsal_model_single_side/nested_cv/dorsal_outer_fold_03.pt
 dorsal_model_single_side/dorsal_embedding_final.pt
+palm_model_single_side/nested_cv/palm_outer_fold_01.pt
+palm_model_single_side/nested_cv/palm_outer_fold_02.pt
+palm_model_single_side/nested_cv/palm_outer_fold_03.pt
+palm_model_single_side/nested_cv/palm_outer_fold_04.pt
