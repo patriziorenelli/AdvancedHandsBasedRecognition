@@ -37,20 +37,192 @@ RIASSUNTO:
 
 TODO: !!!!
 
-DA ESEGUIRE:
- I NESTED E QUINDI I MODELLI ADDESTRATI HANNO UN PROBLEMA, I GENUINI SONO CREATI CONSIDERANDO SOLO ID DEL SOGGETTO E NON VEDENDO IL SIDE DELLA MANO (DX E SX), 
- BISOGNEREBBE RICALCOLARE TUTTI I NESTED PER AVERE RISULTATI OTTIMALI E MAGARI ANCHE I MODELLI COMPLETI PER RIESEGUIRE TUTTI I TEST...
- BISOGNA POI MODIFICARE multimodal_fusional_new_dataset PER USARE I NUOVI MODELLI E NUOVI FILE _single_side
- IL TUTTO SI POTREBBE FARE MENTRE SI SCRIVE LA TESI, I RISULTATI DOVREBBERO SOLO MIGLIORARE IN TEORIA NO?
-
-
  Nella multimodal_fusional_new_dataset invece i genuini sono costruiti nel modo corretto 
 
 
-RIFARE I TEST DELLA PIPELINE MULTIMODALE CON I MODELLI SINGLE SIDE E VEDERE I NUOVI RISULTATI
+RIFARE I TEST DELLA PIPELINE MULTIMODALE SUL NEW DATASET 
+
+Devo eseguire: 
+Per fare test su 11k Hands stesso:
+DEVO PROVARE I MODELLI FINAL NUOVI SU 11K HANDS !!!!!
+DEVO PROVARE I MODELLI FINAL NUOVI SU MEW DATASET !!!!!
+
+ Test su 11k Hands: DA ESEGUIRE
+  python multimodal_fusional_single_side_on_11k.py --preprocessed_only --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --out_dir risultati_11k_single_side  --calibrate_alpha --calibrate_alpha_for_rank
+
+    [IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+  Protocollo identificazione usato: same_hand_multi_sample_meanenroll
+  Alpha usato per l'identificazione: 0.35
+      palm: Rank-1=98.77% | Rank-5=99.69% | Rank-10=99.69% | MRR=0.9913 | Rank-1(real)=98.77%
+            margine medio top1-top2: 0.5343 (quando sbagliato: 0.0527)
+    dorsal: Rank-1=99.69% | Rank-5=99.69% | Rank-10=100.00% | MRR=0.9973 | Rank-1(real)=99.69%
+            margine medio top1-top2: 0.4429 (quando sbagliato: 0.0409)
+    fused: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(real)=100.00%
+            margine medio top1-top2: 2.2348
+
+  ========================================================================
+  IDENTIFICAZIONE OPEN-SET
+  ========================================================================
+  Split ripetuti: 10 | soggetti totali: 164 | known=82, unknown_cal=41, unknown_test=41 (per split)
+  Probe unknown: scatti 'real' | alpha fusione: 0.35 | score_norm: zscore
+  Soglia = FPIR-obiettivo calibrato su unknown_cal, valutato su unknown_test (soggetti disgiunti). [oracle] = soglia scelta su unknown_test (ottimistica).
+  Valori: media±std sugli split, in %.
+
+  [PALM] probe genuini reali+augmentati (~162 probe genuini/split)
+    Rank-1 (solo known)=98.95±0.56 | AUC known-vs-unknown=0.9982±0.0011 | Open-set EER=1.71±0.53
+    FPIR-obiettivo 1%: FPIR_test=0.61±0.54 | DIR@1=97.84±0.69 | FRR_known=2.10±0.68 | misid=0.06±0.19 | soglia=0.642±0.043 | [oracle DIR@1=98.27±0.67]
+    FPIR-obiettivo 5%: FPIR_test=4.93±3.57 | DIR@1=98.70±0.58 | FRR_known=0.92±0.74 | misid=0.37±0.50 | soglia=0.514±0.023 | [oracle DIR@1=98.70±0.51]
+    FPIR-obiettivo 10%: FPIR_test=9.86±6.01 | DIR@1=98.83±0.58 | FRR_known=0.49±0.46 | misid=0.68±0.51 | soglia=0.464±0.023 | [oracle DIR@1=98.89±0.60]
+
+  [PALM] probe genuini SOLO reali (~162 probe genuini/split)
+    Rank-1 (solo known)=98.95±0.56 | AUC known-vs-unknown=0.9982±0.0011 | Open-set EER=1.71±0.53
+    FPIR-obiettivo 1%: FPIR_test=0.61±0.54 | DIR@1=97.84±0.69 | FRR_known=2.10±0.68 | misid=0.06±0.19 | soglia=0.642±0.043 | [oracle DIR@1=98.27±0.67]
+    FPIR-obiettivo 5%: FPIR_test=4.93±3.57 | DIR@1=98.70±0.58 | FRR_known=0.92±0.74 | misid=0.37±0.50 | soglia=0.514±0.023 | [oracle DIR@1=98.70±0.51]
+    FPIR-obiettivo 10%: FPIR_test=9.86±6.01 | DIR@1=98.83±0.58 | FRR_known=0.49±0.46 | misid=0.68±0.51 | soglia=0.464±0.023 | [oracle DIR@1=98.89±0.60]
+
+  [DORSAL] probe genuini reali+augmentati (~162 probe genuini/split)
+    Rank-1 (solo known)=99.63±0.30 | AUC known-vs-unknown=0.9982±0.0015 | Open-set EER=0.64±0.29
+    FPIR-obiettivo 1%: FPIR_test=1.12±1.26 | DIR@1=99.38±0.39 | FRR_known=0.62±0.39 | misid=0.00±0.00 | soglia=0.636±0.031 | [oracle DIR@1=99.38±0.48]
+    FPIR-obiettivo 5%: FPIR_test=4.51±2.56 | DIR@1=99.51±0.25 | FRR_known=0.49±0.25 | misid=0.00±0.00 | soglia=0.558±0.015 | [oracle DIR@1=99.51±0.25]
+    FPIR-obiettivo 10%: FPIR_test=10.41±3.96 | DIR@1=99.51±0.25 | FRR_known=0.49±0.25 | misid=0.00±0.00 | soglia=0.514±0.014 | [oracle DIR@1=99.51±0.25]
+
+  [DORSAL] probe genuini SOLO reali (~162 probe genuini/split)
+    Rank-1 (solo known)=99.63±0.30 | AUC known-vs-unknown=0.9982±0.0015 | Open-set EER=0.64±0.29
+    FPIR-obiettivo 1%: FPIR_test=1.12±1.26 | DIR@1=99.38±0.39 | FRR_known=0.62±0.39 | misid=0.00±0.00 | soglia=0.636±0.031 | [oracle DIR@1=99.38±0.48]
+    FPIR-obiettivo 5%: FPIR_test=4.51±2.56 | DIR@1=99.51±0.25 | FRR_known=0.49±0.25 | misid=0.00±0.00 | soglia=0.558±0.015 | [oracle DIR@1=99.51±0.25]
+    FPIR-obiettivo 10%: FPIR_test=10.41±3.96 | DIR@1=99.51±0.25 | FRR_known=0.49±0.25 | misid=0.00±0.00 | soglia=0.514±0.014 | [oracle DIR@1=99.51±0.25]
+
+  [FUSED] probe genuini reali+augmentati (~162 probe genuini/split)
+    Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9997±0.0003 | Open-set EER=0.47±0.24
+    FPIR-obiettivo 1%: FPIR_test=1.71±1.56 | DIR@1=99.63±0.30 | FRR_known=0.37±0.30 | misid=0.00±0.00 | soglia=1.785±0.068 | [oracle DIR@1=99.63±0.30]
+    FPIR-obiettivo 5%: FPIR_test=5.71±2.20 | DIR@1=99.63±0.30 | FRR_known=0.37±0.30 | misid=0.00±0.00 | soglia=1.534±0.053 | [oracle DIR@1=99.63±0.30]
+    FPIR-obiettivo 10%: FPIR_test=10.92±2.44 | DIR@1=99.94±0.19 | FRR_known=0.06±0.19 | misid=0.00±0.00 | soglia=1.380±0.043 | [oracle DIR@1=99.94±0.19]
+
+  [FUSED] probe genuini SOLO reali (~162 probe genuini/split)
+    Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9997±0.0003 | Open-set EER=0.47±0.24
+    FPIR-obiettivo 1%: FPIR_test=1.71±1.56 | DIR@1=99.63±0.30 | FRR_known=0.37±0.30 | misid=0.00±0.00 | soglia=1.785±0.068 | [oracle DIR@1=99.63±0.30]
+    FPIR-obiettivo 5%: FPIR_test=5.71±2.20 | DIR@1=99.63±0.30 | FRR_known=0.37±0.30 | misid=0.00±0.00 | soglia=1.534±0.053 | [oracle DIR@1=99.63±0.30]
+    FPIR-obiettivo 10%: FPIR_test=10.92±2.44 | DIR@1=99.94±0.19 | FRR_known=0.06±0.19 | misid=0.00±0.00 | soglia=1.380±0.043 | [oracle DIR@1=99.94±0.19]
+
+  ========================================================================
+  TEST COMPLETATO
+  ========================================================================
+  Risultati salvati in: risultati_11k_single_side\results
 
 
+ Test cross dataset usando i modelli trainati su 11k hands su new_dataset: DONE 
+  python multimodal_fusional_single_side.py --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_zenodo\Participants" --augmented_raw_dir "D:\Users\Patrizio\Desktop\Tesi\augmented_raw" --preprocessed_dir "D:\Users\Patrizio\Desktop\Tesi\new_dataset_preprocessed" --skip_preprocessing --out_dir "D:\Users\Patrizio\Desktop\Tesi\run_results_single_side_train11k_on_new_dataset" --palm_checkpoint models_final/palm_embedding_final_single_side.pt --dorsal_checkpoint models_final_dorsal/dorsal_embedding_final_single_side.pt --calibrate_alpha_for_rank --rank_kfold 5 --gallery_holdout_real 1 --openset_repeats 10 --openset_known_fraction 0.5 --openset_cal_fraction 0.5 --openset_target_fpirs 0.01,0.05,0.10 --openset_unknown_samples real
 
+  ========================================================================
+  NUOVO DATASET - EVALUATION (single_side)
+  ========================================================================
+  Immagini reali trovate:  792
+  Coppie multimodali reali:396
+  Coppie incomplete:       0
+  Soggetti:                198
+
+  Immagini totali (reali+augmentate): 1584  (di cui augmentate: 792)
+  Coppie multimodali totali:           792
+
+  Preprocessing saltato (--skip_preprocessing).
+
+  Campioni multimodali utilizzabili: 792
+
+  ========================================================================
+  VERIFICA 1:1
+  ========================================================================
+  Protocollo genuine usato: single_side_same_side_same_hand_multi_sample
+  Coppie genuine:  396
+  Coppie impostor: 156024
+    lato L-L: genuine=198 impostor=78012
+    lato R-R: genuine=198 impostor=78012
+  Alpha:            0.50
+      palm: EER=0.00% | AUC=1.0000 | Acc@EER=100.00% | Acc@0.55=17.41%
+    dorsal: EER=3.03% | AUC=0.9972 | Acc@EER=96.97% | Acc@0.55=0.25%
+    fused: EER=0.01% | AUC=1.0000 | Acc@EER=99.98% | Acc@0.55=72.98%  [scala non comparabile, vedi note]
+
+  ========================================================================
+  IDENTIFICAZIONE 1:N
+  ========================================================================
+
+  Alpha calibrato per Rank-1 (5-fold, subject-disjoint): 0.15
+  Rank-1 medio al best alpha: 100.00%
+  Curva Rank-1-vs-alpha:
+    alpha=0.00  Rank-1 medio=97.99%
+    alpha=0.05  Rank-1 medio=99.50%
+    alpha=0.10  Rank-1 medio=99.50%
+    alpha=0.15  Rank-1 medio=100.00%
+    alpha=0.20  Rank-1 medio=100.00%
+    alpha=0.25  Rank-1 medio=100.00%
+    alpha=0.30  Rank-1 medio=100.00%
+    alpha=0.35  Rank-1 medio=100.00%
+    alpha=0.40  Rank-1 medio=100.00%
+    alpha=0.45  Rank-1 medio=100.00%
+    alpha=0.50  Rank-1 medio=100.00%
+    alpha=0.55  Rank-1 medio=100.00%
+    alpha=0.60  Rank-1 medio=100.00%
+    alpha=0.65  Rank-1 medio=100.00%
+    alpha=0.70  Rank-1 medio=100.00%
+    alpha=0.75  Rank-1 medio=100.00%
+    alpha=0.80  Rank-1 medio=100.00%
+    alpha=0.85  Rank-1 medio=100.00%
+    alpha=0.90  Rank-1 medio=100.00%
+    alpha=0.95  Rank-1 medio=100.00%
+    alpha=1.00  Rank-1 medio=100.00%
+
+  [IDENTIFICAZIONE 1:N] Protocollo Stessa Mano (Gallery: media scatti reali enrollment, Probe: scatti reali held-out + augmentati)
+  Protocollo identificazione usato: same_hand_multi_sample_meanenroll
+  Alpha usato per l'identificazione: 0.15
+      palm: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(aug)=100.00%
+            margine medio top1-top2: 0.1214
+    dorsal: Rank-1=96.97% | Rank-5=98.99% | Rank-10=100.00% | MRR=0.9783 | Rank-1(aug)=96.97%
+            margine medio top1-top2: 0.0351 (quando sbagliato: 0.0022)
+    fused: Rank-1=100.00% | Rank-5=100.00% | Rank-10=100.00% | MRR=1.0000 | Rank-1(aug)=100.00%
+            margine medio top1-top2: 0.9559
+
+  ========================================================================
+  IDENTIFICAZIONE OPEN-SET
+  ========================================================================
+  Split ripetuti: 10 | soggetti totali: 198 | known=99, unknown_cal=50, unknown_test=49 (per split)
+  Probe unknown: scatti 'real' | alpha fusione: 0.15 | score_norm: zscore
+  Soglia = FPIR-obiettivo calibrato su unknown_cal, valutato su unknown_test (soggetti disgiunti). [oracle] = soglia scelta su unknown_test (ottimistica).
+  Valori: media±std sugli split, in %.
+
+  [PALM] probe genuini reali+augmentati (~198 probe genuini/split)
+    Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=1.0000±0.0000 | Open-set EER=0.00±0.00
+    FPIR-obiettivo 1%: FPIR_test=1.02±2.46 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.941±0.004 | [oracle DIR@1=100.00±0.00]
+    FPIR-obiettivo 5%: FPIR_test=4.90±5.02 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.928±0.006 | [oracle DIR@1=100.00±0.00]
+    FPIR-obiettivo 10%: FPIR_test=10.20±6.32 | DIR@1=100.00±0.00 | FRR_known=0.00±0.00 | misid=0.00±0.00 | soglia=0.918±0.004 | [oracle DIR@1=100.00±0.00]
+
+  [PALM] probe genuini SOLO reali (~0 probe genuini/split)
+    n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+  [DORSAL] probe genuini reali+augmentati (~198 probe genuini/split)
+    Rank-1 (solo known)=97.27±0.65 | AUC known-vs-unknown=0.9724±0.0077 | Open-set EER=6.40±1.16
+    FPIR-obiettivo 1%: FPIR_test=1.84±3.09 | DIR@1=91.72±1.91 | FRR_known=8.28±1.91 | misid=0.00±0.00 | soglia=0.978±0.002 | [oracle DIR@1=91.82±2.09]
+    FPIR-obiettivo 5%: FPIR_test=4.08±3.98 | DIR@1=93.23±1.63 | FRR_known=6.46±1.70 | misid=0.30±0.46 | soglia=0.975±0.001 | [oracle DIR@1=93.13±1.41]
+    FPIR-obiettivo 10%: FPIR_test=9.59±5.99 | DIR@1=93.74±1.48 | FRR_known=5.66±1.44 | misid=0.61±0.49 | soglia=0.973±0.001 | [oracle DIR@1=93.64±1.28]
+
+  [DORSAL] probe genuini SOLO reali (~0 probe genuini/split)
+    n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+  [FUSED] probe genuini reali+augmentati (~198 probe genuini/split)
+    Rank-1 (solo known)=100.00±0.00 | AUC known-vs-unknown=0.9866±0.0054 | Open-set EER=2.54±1.06
+    FPIR-obiettivo 1%: FPIR_test=2.04±2.58 | DIR@1=95.35±1.82 | FRR_known=4.65±1.82 | misid=0.00±0.00 | soglia=1.684±0.059 | [oracle DIR@1=95.86±1.66]
+    FPIR-obiettivo 5%: FPIR_test=5.10±3.90 | DIR@1=97.37±1.03 | FRR_known=2.63±1.03 | misid=0.00±0.00 | soglia=1.587±0.031 | [oracle DIR@1=97.17±1.09]
+    FPIR-obiettivo 10%: FPIR_test=12.04±3.81 | DIR@1=97.37±1.03 | FRR_known=2.63±1.03 | misid=0.00±0.00 | soglia=1.528±0.020 | [oracle DIR@1=97.37±1.03]
+
+  [FUSED] probe genuini SOLO reali (~0 probe genuini/split)
+    n/d: nessun probe genuino reale held-out (servono >= 2 scatti REALI per mano)
+
+  ========================================================================
+  TEST COMPLETATO
+  ========================================================================
+  Risultati salvati in: D:\Users\Patrizio\Desktop\Tesi\run_results_single_side_train11k_on_new_dataset\results
+
+-------------------------------------------
+MODELLI RITRAINATI SU CASE SX-SX E DX-DX 
+-------------------------------------------
 
 NESTED PALM: python palm_run_single_side.py nested_cv --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --outer_folds 4 --inner_folds 2 --inner_epochs 15 --outer_epochs 15 --lr_grid 0.0001 --freeze_mobilenet_grid false,true --vit_cache_path "D:\Users\Patrizio\Desktop\Tesi\vit_cache.npz" --early_stopping_patience 3 --num_workers 2 --batch_size 48
 OUTER 4] FINAL TEST (mai usato nell'inner CV): EER=8.67% @thr=0.263
@@ -68,6 +240,7 @@ TRAIN PALM: python palm_run_single_side.py train --data_dir "D:\Users\Patrizio\D
 Training completato. Modello finale: palm_model_single_side\palm_embedding_final.pt
 Log completo del run: palm_model_single_side\logs\train_20261029_152712_557c2e.jsonl
 EER validation open-set: 3.99% @thr=0.367
+
 
 TRAIN DORSO: NUOVO MODELLO dorsal_model_single_side\dorsal_embedding_final.pt !!!
 python dorsal_run_single_side.py train --data_dir "D:\Users\Patrizio\Desktop\Tesi\dataset_preprocessed" --epochs 20 --lr 0.0001 --freeze_mobilenet false --swin_cache_path "D:\Users\Patrizio\Desktop\Tesi\swin_cache.npz" --early_stopping_patience 5 --num_workers 1 --batch_size 16
@@ -1311,6 +1484,8 @@ Min EER: 3.64% | Max EER: 8.18%
 Threshold EER medio (solo descrittivo): 0.309
 Summary JSON: dorsal_model_single_side\nested_cv\nested_cv_summary.json
 Run log: dorsal_model_single_side\logs\nested_cv_20261023_014018_b04385.jsonl
+
+-----------------------------------------------------------------------------------------------
 
 
 STUDIO ABLAZIONE VERO :

@@ -1,0 +1,61 @@
+{
+  "alpha": 0.55,
+  "mean_eer_at_best_alpha": 0.0006529474340226449,
+  "mean_eer_by_alpha": {
+    "0.0": 0.0027930761326231198,
+    "0.05": 0.002238629337833675,
+    "0.1": 0.0017813238808430602,
+    "0.15000000000000002": 0.001443187633424771,
+    "0.2": 0.0012321301090348527,
+    "0.25": 0.0010149581121028756,
+    "0.30000000000000004": 0.0008517927159869062,
+    "0.35000000000000003": 0.0008193641710008128,
+    "0.4": 0.000803507907275646,
+    "0.45": 0.0007436890242467598,
+    "0.5": 0.0007125805982552767,
+    "0.55": 0.0006529474340226449,
+    "0.6000000000000001": 0.0006888767800282334,
+    "0.65": 0.0006857951760391543,
+    "0.7000000000000001": 0.0008104232551127034,
+    "0.75": 0.0009944940487977103,
+    "0.8": 0.0011562705599806478,
+    "0.8500000000000001": 0.001400594365286575,
+    "0.9": 0.0016536535751937227,
+    "0.9500000000000001": 0.0019764324756277743,
+    "1.0": 0.002421962619804221
+  },
+  "k_folds": 5,
+  "fold_reports": [
+    {
+      "fold": 0,
+      "n_subjects": 33,
+      "protocol_used": "single_side_same_side_same_hand_multi_sample",
+      "best_alpha_this_fold": 0.6000000000000001
+    },
+    {
+      "fold": 1,
+      "n_subjects": 33,
+      "protocol_used": "single_side_same_side_same_hand_multi_sample",
+      "best_alpha_this_fold": 0.45
+    },
+    {
+      "fold": 2,
+      "n_subjects": 33,
+      "protocol_used": "single_side_same_side_same_hand_multi_sample",
+      "best_alpha_this_fold": 0.4
+    },
+    {
+      "fold": 3,
+      "n_subjects": 33,
+      "protocol_used": "single_side_same_side_same_hand_multi_sample",
+      "best_alpha_this_fold": 0.35000000000000003
+    },
+    {
+      "fold": 4,
+      "n_subjects": 32,
+      "protocol_used": "single_side_same_side_same_hand_multi_sample",
+      "best_alpha_this_fold": 0.35000000000000003
+    }
+  ],
+  "n_subjects_total": 164
+}

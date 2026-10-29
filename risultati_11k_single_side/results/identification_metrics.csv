@@ -1,0 +1,4 @@
+system,gallery_side,probe_side,n_gallery_subjects,n_probes,n_probes_real,n_probes_augmented,rank1,rank1_percent,rank1_percent_real_probes,rank1_percent_augmented_probes,rank5,rank5_percent,rank10,rank10_percent,mrr,mean_margin_top1_top2,mean_margin_when_wrong,n_tied_top1,n_tied_top1_percent
+palm,Same Hand (Enrollment),Same Hand (Held-out),325,325,325,0,0.9876923076923076,98.76923076923077,98.76923076923077,,0.9969230769230769,99.6923076923077,0.9969230769230769,99.6923076923077,0.9912623274161736,0.5342529851941332,0.05270987601280552,0,0.0
+dorsal,Same Hand (Enrollment),Same Hand (Held-out),325,325,325,0,0.9969230769230769,99.6923076923077,99.6923076923077,,0.9969230769230769,99.6923076923077,1.0,100.0,0.9972649572649572,0.44290001690982883,0.040854793262259936,0,0.0
+fused,Same Hand (Enrollment),Same Hand (Held-out),325,325,325,0,1.0,100.0,100.0,,1.0,100.0,1.0,100.0,1.0,2.2347593665813865,,0,0.0
